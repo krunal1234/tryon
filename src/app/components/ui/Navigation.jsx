@@ -1,4 +1,4 @@
-// components/Navigation.js - Updated to use new auth hook
+// components/Navigation.js - Fixed and improved version
 'use client';
 
 import Link from 'next/link';
@@ -57,7 +57,7 @@ export default function Navigation() {
             <Link
               href="/app/products"
               className={`flex items-center gap-2 px-3 py-2 rounded-md transition ${
-                pathname === '/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                pathname === '/app/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
               <Package size={18} />
@@ -69,7 +69,7 @@ export default function Navigation() {
               <Link
                 href="/app/favorites"
                 className={`flex items-center gap-2 px-3 py-2 rounded-md transition ${
-                  pathname === '/favorites' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                  pathname === '/app/favorites' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <Heart size={18} />
@@ -158,9 +158,9 @@ export default function Navigation() {
                     )}
                     
                     <Link
-                      href="/profile"
+                      href="/app/profile"
                       className={`flex items-center gap-2 px-3 py-2 rounded-md transition ${
-                        pathname === '/profile' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                        pathname === '/app/profile' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
                       }`}
                     >
                       <User size={18} />
@@ -230,7 +230,7 @@ export default function Navigation() {
                 href="/app/products"
                 onClick={closeMobileMenu}
                 className={`flex items-center gap-3 px-3 py-2 rounded-md transition ${
-                  pathname === '/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                  pathname === '/app/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
                 <Package size={20} />
@@ -243,7 +243,7 @@ export default function Navigation() {
                   href="/app/favorites"
                   onClick={closeMobileMenu}
                   className={`flex items-center gap-3 px-3 py-2 rounded-md transition ${
-                    pathname === '/favorites' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                    pathname === '/app/favorites' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
                   }`}
                 >
                   <Heart size={20} />
@@ -345,7 +345,7 @@ export default function Navigation() {
                         href="/app/profile"
                         onClick={closeMobileMenu}
                         className={`flex items-center gap-3 px-3 py-2 rounded-md transition ${
-                          pathname === '/profile' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
+                          pathname === '/app/profile' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
                         }`}
                       >
                         <User size={20} />
