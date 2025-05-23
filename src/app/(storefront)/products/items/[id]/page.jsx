@@ -23,7 +23,6 @@ import {
 } from 'lucide-react';
 import SafeImage from '@/app/components/SafeImage';
 import TryOnModal from '@/app/components/ui/try-on/TryOnModal';
-import InquiryForm from '@/app/(dashboard)/inquiries/page';
 import { useAuth } from '@/lib/useAuth';
 import { productHelpers, 
   favoriteHelpers, 
@@ -32,6 +31,7 @@ import { productHelpers,
   roleHelpers 
  } from '@/lib/supabaseClient';
 import { getJewelryPlaceholder, imageConfigs } from '@/lib/imageUtils';
+import InquiryForm from '@/app/app/inquiries/page';
 
 export default function ProductDetailPage() {
   const params = useParams();
