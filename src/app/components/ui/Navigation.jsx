@@ -55,7 +55,7 @@ export default function Navigation() {
             </Link>
             
             <Link
-              href="/products"
+              href="/app/products"
               className={`flex items-center gap-2 px-3 py-2 rounded-md transition ${
                 pathname === '/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
@@ -67,7 +67,7 @@ export default function Navigation() {
             {/* Customer-specific navigation */}
             {user && isCustomer && (
               <Link
-                href="/favorites"
+                href="/app/favorites"
                 className={`flex items-center gap-2 px-3 py-2 rounded-md transition ${
                   pathname === '/favorites' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
                 }`}
@@ -227,7 +227,7 @@ export default function Navigation() {
               </Link>
               
               <Link
-                href="/products"
+                href="/app/products"
                 onClick={closeMobileMenu}
                 className={`flex items-center gap-3 px-3 py-2 rounded-md transition ${
                   pathname === '/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
@@ -240,7 +240,7 @@ export default function Navigation() {
               {/* Customer-specific mobile navigation */}
               {user && isCustomer && (
                 <Link
-                  href="/favorites"
+                  href="/app/favorites"
                   onClick={closeMobileMenu}
                   className={`flex items-center gap-3 px-3 py-2 rounded-md transition ${
                     pathname === '/favorites' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
@@ -342,7 +342,7 @@ export default function Navigation() {
                       )}
                       
                       <Link
-                        href="/profile"
+                        href="/app/profile"
                         onClick={closeMobileMenu}
                         className={`flex items-center gap-3 px-3 py-2 rounded-md transition ${
                           pathname === '/profile' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
