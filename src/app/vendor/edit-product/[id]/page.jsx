@@ -4,8 +4,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
-import ProductForm from '@/components/ProductForm';
 import { Package, ArrowLeft } from 'lucide-react';
+import ProductForm from '@/app/components/ui/ProductForm';
 
 export default function EditProductPage() {
   const params = useParams();
