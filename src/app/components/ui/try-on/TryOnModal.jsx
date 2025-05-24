@@ -195,7 +195,21 @@ export default function TryOnModal({ product, onClose }) {
 
   // Real-time rendering with better error handling
   const renderOverlay = useCallback(() => {
-    if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
+    console.log('🔄 Render frame - videoReady:', videoReady, 'step:', step);
+    
+    if (!overlayCanvasRef.current || !videoRef.current) {
+      console.log('❌ Missing refs:', {
+        overlayCanvas: !!overlayCanvasRef.current,
+        video: !!videoRef.current
+      });
+      if (step === 'camera') {
+        animationFrameRef.current = requestAnimationFrame(renderOverlay);
+      }
+      return;
+    }
+
+    if (!videoReady) {
+      console.log('⏳ Video not ready yet, waiting...');
       if (step === 'camera') {
         animationFrameRef.current = requestAnimationFrame(renderOverlay);
       }
@@ -205,6 +219,14 @@ export default function TryOnModal({ product, onClose }) {
     const video = videoRef.current;
     const overlayCanvas = overlayCanvasRef.current;
     const ctx = overlayCanvas.getContext('2d');
+
+    console.log('📊 Video status:', {
+      videoWidth: video.videoWidth,
+      videoHeight: video.videoHeight,
+      readyState: video.readyState,
+      canvasWidth: overlayCanvas.width,
+      canvasHeight: overlayCanvas.height
+    });
 
     // Ensure canvas matches video dimensions
     if (overlayCanvas.width !== video.videoWidth || overlayCanvas.height !== video.videoHeight) {
@@ -408,7 +430,7 @@ export default function TryOnModal({ product, onClose }) {
     if (step === 'camera') {
       animationFrameRef.current = requestAnimationFrame(renderOverlay);
     }
-  }, [videoReady, faceDetectionModel, lastDetection, product, detectFace, imageLoaded, step]);
+  }, [faceDetectionModel, lastDetection, product, detectFace, imageLoaded, step]); // Removed videoReady from dependencies
 
   const startRealTimeDetection = useCallback(() => {
     console.log('🚀 Starting real-time detection');
