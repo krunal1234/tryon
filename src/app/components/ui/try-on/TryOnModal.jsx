@@ -135,10 +135,18 @@ export default function TryOnModal({ product, onClose }) {
     return () => video.removeEventListener('loadedmetadata', handleLoadedMetadata);
   }, [step]);
 
-  // Enhanced face detection with more realistic positioning
+  // ALWAYS return face detection (for testing/demo purposes)
   const detectFace = useCallback((video) => {
     const videoWidth = video.videoWidth;
     const videoHeight = video.videoHeight;
+    
+    // Ensure we have valid video dimensions
+    if (!videoWidth || !videoHeight) {
+      console.log('❌ Invalid video dimensions:', { videoWidth, videoHeight });
+      return null;
+    }
+    
+    console.log('📐 Video dimensions:', { videoWidth, videoHeight });
     
     // Center face in video with more natural proportions
     const faceWidth = Math.min(videoWidth * 0.4, videoHeight * 0.5);
@@ -148,9 +156,9 @@ export default function TryOnModal({ product, onClose }) {
     const centerY = videoHeight * 0.45; // Slightly higher in frame
     
     // Add subtle animation for testing
-    const time = Date.now() * 0.0005; // Slower animation
-    const offsetX = Math.sin(time) * 2;
-    const offsetY = Math.cos(time * 0.7) * 1.5;
+    const time = Date.now() * 0.001; // More visible animation for testing
+    const offsetX = Math.sin(time) * 5;
+    const offsetY = Math.cos(time * 0.7) * 3;
 
     const detection = {
       faceBox: {
@@ -181,6 +189,7 @@ export default function TryOnModal({ product, onClose }) {
       confidence: 0.95
     };
 
+    console.log('👁️ Face detection result:', detection);
     return detection;
   }, []);
 
@@ -207,59 +216,126 @@ export default function TryOnModal({ product, onClose }) {
     // Clear canvas
     ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-    // Get face detection
-    if (faceDetectionModel) {
+    // Get face detection - ALWAYS detect for demo
+    if (faceDetectionModel && video.videoWidth > 0 && video.videoHeight > 0) {
       try {
         const detection = detectFace(video);
-        setLastDetection(detection);
+        if (detection) {
+          setLastDetection(detection);
+          console.log('✅ Face detection successful');
+        } else {
+          console.log('❌ Face detection returned null');
+        }
       } catch (error) {
         console.error('❌ Detection error:', error);
       }
+    } else {
+      console.log('⚠️ Detection conditions not met:', {
+        model: !!faceDetectionModel,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight
+      });
     }
 
-    // Render jewelry
-    if (lastDetection && productImageRef.current && imageLoaded) {
+    // Render jewelry - FORCE RENDERING FOR TESTING
+    if (productImageRef.current && imageLoaded) {
+      console.log('🎨 Attempting to render jewelry...');
+      
+      // Use lastDetection if available, otherwise create a default one
+      let detection = lastDetection;
+      if (!detection) {
+        console.log('⚠️ No face detection, using default positioning');
+        // Create default detection for testing
+        detection = {
+          faceBox: {
+            x: overlayCanvas.width * 0.3,
+            y: overlayCanvas.height * 0.25,
+            width: overlayCanvas.width * 0.4,
+            height: overlayCanvas.height * 0.5
+          },
+          landmarks: {
+            leftEar: { 
+              x: overlayCanvas.width * 0.35, 
+              y: overlayCanvas.height * 0.4 
+            },
+            rightEar: { 
+              x: overlayCanvas.width * 0.65, 
+              y: overlayCanvas.height * 0.4 
+            },
+            nose: { 
+              x: overlayCanvas.width * 0.5, 
+              y: overlayCanvas.height * 0.45 
+            },
+            chin: { 
+              x: overlayCanvas.width * 0.5, 
+              y: overlayCanvas.height * 0.65 
+            }
+          }
+        };
+      }
+      
       setRenderingActive(true);
       
       try {
-        const { landmarks, faceBox } = lastDetection;
+        const { landmarks, faceBox } = detection;
         
-        // Draw face box for debugging (remove in production)
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
-        ctx.lineWidth = 2;
+        console.log('🎯 Rendering with landmarks:', landmarks);
+        
+        // Draw face box for debugging (keep this visible)
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)'; // More visible
+        ctx.lineWidth = 3;
         ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
         
-        // Draw landmark points for debugging (remove in production)
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
-        Object.values(landmarks).forEach(point => {
+        // Draw landmark points for debugging (keep this visible)
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)'; // More visible
+        Object.entries(landmarks).forEach(([name, point]) => {
           ctx.beginPath();
-          ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+          ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI); // Bigger dots
           ctx.fill();
+          
+          // Add labels
+          ctx.fillStyle = 'white';
+          ctx.font = '12px Arial';
+          ctx.fillText(name, point.x + 8, point.y - 8);
+          ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
         });
 
         // Determine jewelry type and render
         const isEarring = product.category?.toLowerCase().includes('earring') || 
                          product.name?.toLowerCase().includes('earring') ||
-                         product.name?.toLowerCase().includes('chandbali');
+                         product.name?.toLowerCase().includes('chandbali') ||
+                         true; // Force earring mode for testing
 
         if (isEarring) {
-          // Calculate earring size based on face
-          const baseSize = Math.min(faceBox.width * 0.15, faceBox.height * 0.2);
+          // Calculate earring size based on face - MAKE THEM BIGGER FOR VISIBILITY
+          const baseSize = Math.max(faceBox.width * 0.25, 60); // Minimum 60px
           const aspectRatio = productImageRef.current.height / productImageRef.current.width;
           
           const earringWidth = baseSize;
           const earringHeight = baseSize * aspectRatio;
 
-          console.log('👂 Rendering earrings:', {
+          console.log('👂 Rendering earrings with size:', {
             width: earringWidth,
             height: earringHeight,
+            baseSize,
+            aspectRatio,
             leftEar: landmarks.leftEar,
             rightEar: landmarks.rightEar
           });
 
-          // Left earring
+          // Left earring - VERY VISIBLE
           ctx.save();
-          ctx.globalAlpha = 0.9; // Slight transparency for realism
+          ctx.globalAlpha = 1.0; // Full opacity for testing
+          
+          // Add a background for visibility
+          ctx.fillStyle = 'rgba(255, 255, 0, 0.3)'; // Yellow background
+          ctx.fillRect(
+            landmarks.leftEar.x - earringWidth / 2 - 5,
+            landmarks.leftEar.y - earringHeight * 0.3 - 5,
+            earringWidth + 10,
+            earringHeight + 10
+          );
+          
           ctx.drawImage(
             productImageRef.current,
             landmarks.leftEar.x - earringWidth / 2,
@@ -269,9 +345,19 @@ export default function TryOnModal({ product, onClose }) {
           );
           ctx.restore();
 
-          // Right earring (mirrored)
+          // Right earring (mirrored) - VERY VISIBLE
           ctx.save();
-          ctx.globalAlpha = 0.9;
+          ctx.globalAlpha = 1.0; // Full opacity for testing
+          
+          // Add a background for visibility
+          ctx.fillStyle = 'rgba(255, 255, 0, 0.3)'; // Yellow background
+          ctx.fillRect(
+            landmarks.rightEar.x - earringWidth / 2 - 5,
+            landmarks.rightEar.y - earringHeight * 0.3 - 5,
+            earringWidth + 10,
+            earringHeight + 10
+          );
+          
           ctx.scale(-1, 1);
           ctx.drawImage(
             productImageRef.current,
@@ -281,15 +367,19 @@ export default function TryOnModal({ product, onClose }) {
             earringHeight
           );
           ctx.restore();
+          
+          console.log('✅ Earrings rendered successfully');
 
         } else if (product.category?.toLowerCase().includes('necklace')) {
           // Necklace rendering
-          const necklaceWidth = faceBox.width * 0.7;
+          const necklaceWidth = faceBox.width * 0.8;
           const aspectRatio = productImageRef.current.height / productImageRef.current.width;
           const necklaceHeight = necklaceWidth * aspectRatio;
 
+          console.log('📿 Rendering necklace:', { necklaceWidth, necklaceHeight });
+
           ctx.save();
-          ctx.globalAlpha = 0.9;
+          ctx.globalAlpha = 1.0;
           ctx.drawImage(
             productImageRef.current,
             landmarks.chin.x - necklaceWidth / 2,
@@ -298,12 +388,19 @@ export default function TryOnModal({ product, onClose }) {
             necklaceHeight
           );
           ctx.restore();
+          
+          console.log('✅ Necklace rendered successfully');
         }
 
       } catch (renderError) {
         console.error('❌ Render error:', renderError);
+        setRenderingActive(false);
       }
     } else {
+      console.log('❌ Cannot render - missing requirements:', {
+        productImage: !!productImageRef.current,
+        imageLoaded
+      });
       setRenderingActive(false);
     }
 
