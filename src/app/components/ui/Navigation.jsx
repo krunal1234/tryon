@@ -55,7 +55,7 @@ export default function Navigation() {
             </Link>
             
             <Link
-              href="/app/products"
+              href="/products/items"
               className={`flex items-center gap-2 px-3 py-2 rounded-md transition ${
                 pathname === '/app/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
               }`}
@@ -227,7 +227,7 @@ export default function Navigation() {
               </Link>
               
               <Link
-                href="/app/products"
+                href="/products/items"
                 onClick={closeMobileMenu}
                 className={`flex items-center gap-3 px-3 py-2 rounded-md transition ${
                   pathname === '/app/products' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-700 hover:bg-gray-100'
