@@ -1,4 +1,3 @@
-// app/(auth)/(user)/login/page.jsx - Fixed with Suspense boundary
 'use client';
 
 import { useState, Suspense } from 'react';
