@@ -23,74 +23,6 @@ export default function TryOnModal({ product, onClose }) {
   const animationFrameRef = useRef(null);
   const productImageRef = useRef(null);
 
-  
-  // Render overlay
-  const renderOverlay = useCallback(() => {
-    if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
-      animationFrameRef.current = requestAnimationFrame(renderOverlay);
-      return;
-    }
-
-    const video = videoRef.current;
-    const canvas = overlayCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (faceDetectionModel) {
-      const detection = detectFace(video);
-      if (detection) {
-        setLastDetection(detection);
-      }
-    }
-
-    if (productImageRef.current && imageLoaded) {
-      const detection = lastDetection;
-      if (detection) {
-        const { landmarks, faceBox } = detection;
-        ctx.strokeStyle = 'rgba(0,255,0,0.8)';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
-
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
-        Object.entries(landmarks).forEach(([name, pt]) => {
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
-          ctx.fill();
-        });
-
-        const isEarring = product.category?.toLowerCase().includes('earring') || true;
-        if (isEarring) {
-          const baseSize = Math.max(faceBox.width * 0.25, 60);
-          const aspect = productImageRef.current.height / productImageRef.current.width;
-          const width = baseSize;
-          const height = baseSize * aspect;
-
-          ctx.save();
-          ctx.globalAlpha = 1;
-          ctx.drawImage(productImageRef.current, landmarks.leftEar.x - width / 2, landmarks.leftEar.y - height * 0.3, width, height);
-          ctx.restore();
-
-          ctx.save();
-          ctx.scale(-1, 1);
-          ctx.drawImage(productImageRef.current, -(landmarks.rightEar.x + width / 2), landmarks.rightEar.y - height * 0.3, width, height);
-          ctx.restore();
-
-          setRenderingActive(true);
-        }
-      }
-    }
-
-    if (step === 'camera') {
-      animationFrameRef.current = requestAnimationFrame(renderOverlay);
-    }
-  }, [detectFace, faceDetectionModel, imageLoaded, lastDetection, product, step, videoReady]);
-
   // Debug: Log product data
   useEffect(() => {
     console.log('Product data:', product);
@@ -356,6 +288,74 @@ export default function TryOnModal({ product, onClose }) {
     setVideoReady(false);
     setRenderingActive(false);
   };
+
+  
+  // Render overlay
+  const renderOverlay = useCallback(() => {
+    if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
+      animationFrameRef.current = requestAnimationFrame(renderOverlay);
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = overlayCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (faceDetectionModel) {
+      const detection = detectFace(video);
+      if (detection) {
+        setLastDetection(detection);
+      }
+    }
+
+    if (productImageRef.current && imageLoaded) {
+      const detection = lastDetection;
+      if (detection) {
+        const { landmarks, faceBox } = detection;
+        ctx.strokeStyle = 'rgba(0,255,0,0.8)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
+
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+        Object.entries(landmarks).forEach(([name, pt]) => {
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+
+        const isEarring = product.category?.toLowerCase().includes('earring') || true;
+        if (isEarring) {
+          const baseSize = Math.max(faceBox.width * 0.25, 60);
+          const aspect = productImageRef.current.height / productImageRef.current.width;
+          const width = baseSize;
+          const height = baseSize * aspect;
+
+          ctx.save();
+          ctx.globalAlpha = 1;
+          ctx.drawImage(productImageRef.current, landmarks.leftEar.x - width / 2, landmarks.leftEar.y - height * 0.3, width, height);
+          ctx.restore();
+
+          ctx.save();
+          ctx.scale(-1, 1);
+          ctx.drawImage(productImageRef.current, -(landmarks.rightEar.x + width / 2), landmarks.rightEar.y - height * 0.3, width, height);
+          ctx.restore();
+
+          setRenderingActive(true);
+        }
+      }
+    }
+
+    if (step === 'camera') {
+      animationFrameRef.current = requestAnimationFrame(renderOverlay);
+    }
+  }, [detectFace, faceDetectionModel, imageLoaded, lastDetection, product, step, videoReady]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center p-4 z-50">
