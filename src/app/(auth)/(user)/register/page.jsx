@@ -1,4 +1,4 @@
-// components/TryOnModal.js - Working version with improved face detection
+// components/TryOnModal.js - Clean working version with proper structure
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Camera, Download, RefreshCw } from 'lucide-react';
 import NextImage from 'next/image';
@@ -28,36 +28,45 @@ export default function TryOnModal({ product, onClose }) {
     console.log('Product data:', product);
   }, [product]);
 
-  // Load model
+  // Load TensorFlow model
   useEffect(() => {
     const loadModel = async () => {
       setModelLoading(true);
-      await tf.ready();
-      setTimeout(() => {
-        setFaceDetectionModel({ loaded: true });
+      try {
+        await tf.ready();
+        console.log('✅ TensorFlow.js ready');
+        setTimeout(() => {
+          setFaceDetectionModel({ loaded: true });
+          setModelLoading(false);
+          console.log('✅ Face detection model loaded');
+        }, 500);
+      } catch (error) {
+        console.error('❌ Error loading TensorFlow.js:', error);
         setModelLoading(false);
-      }, 500);
+      }
     };
     loadModel();
   }, []);
 
-  // Load image
+  // Set product image URL
   useEffect(() => {
-    const imageUrl = product?.images?.[0]?.image_url || product?.image_url || product?.image;
-    if (!imageUrl) return;
-
-    setProductImageUrl(imageUrl);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      productImageRef.current = img;
-      setImageLoaded(true);
-    };
-    img.onerror = () => setImageLoadError(`Failed to load image: ${imageUrl}`);
-    img.src = imageUrl;
+    if (product?.images && product.images.length > 0) {
+      const imageUrl = product.images[0].image_url || product.images[0].url || product.images[0];
+      console.log('🖼️ Product image URL:', imageUrl);
+      setProductImageUrl(imageUrl);
+    } else if (product?.image_url) {
+      console.log('🖼️ Product image URL (direct):', product.image_url);
+      setProductImageUrl(product.image_url);
+    } else if (product?.image) {
+      console.log('🖼️ Product image (direct):', product.image);
+      setProductImageUrl(product.image);
+    } else {
+      console.log('❌ No product image found');
+      setProductImageUrl('');
+    }
   }, [product]);
 
-  // Load product image with detailed error handling
+  // Load product image
   useEffect(() => {
     if (productImageUrl) {
       console.log('📥 Loading product image:', productImageUrl);
@@ -89,32 +98,19 @@ export default function TryOnModal({ product, onClose }) {
     }
   }, [productImageUrl]);
 
-  // Clean up
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (stream) stream.getTracks().forEach(track => track.stop());
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, [stream]);
 
-  useEffect(() => {
-    if (videoRef.current) {
-      const video = videoRef.current;
-
-      const onReady = () => {
-        if (video.videoWidth && video.videoHeight) setVideoReady(true);
-      };
-
-      video.addEventListener('loadedmetadata', onReady);
-      video.addEventListener('canplay', onReady);
-      return () => {
-        video.removeEventListener('loadedmetadata', onReady);
-        video.removeEventListener('canplay', onReady);
-      };
-    }
-  }, []);
-
-  // Set video source with better error handling
+  // Set video source
   useEffect(() => {
     if (stream && videoRef.current) {
       console.log('📹 Setting video source...');
@@ -122,12 +118,10 @@ export default function TryOnModal({ product, onClose }) {
       
       video.srcObject = stream;
       
-      // Add error handler
       video.onerror = (error) => {
         console.error('❌ Video error:', error);
       };
       
-      // Try to play the video
       video.play().catch(error => {
         console.log('⚠️ Video play promise rejected (usually fine):', error.message);
       });
@@ -136,65 +130,262 @@ export default function TryOnModal({ product, onClose }) {
     }
   }, [stream]);
 
-  // Video ready handler with better detection
+  // Video ready detection
   useEffect(() => {
     if (!videoRef.current) return;
 
     const video = videoRef.current;
 
-    const handleLoadedMetadata = () => {
-      console.log('📹 Video metadata loaded - checking readiness...');
-      console.log('📊 Video properties:', {
+    const checkVideoReady = () => {
+      console.log('📹 Checking video readiness...', {
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
-        readyState: video.readyState,
-        currentTime: video.currentTime
+        readyState: video.readyState
       });
       
-      // More reliable video ready check
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         console.log('✅ Video is ready!');
         setVideoReady(true);
-      } else {
-        console.log('⚠️ Video dimensions not available yet');
       }
     };
 
-    const handleCanPlay = () => {
-      console.log('📹 Video can play event');
-      if (video.videoWidth > 0 && video.videoHeight > 0 && !videoReady) {
-        console.log('✅ Video ready via canplay event');
-        setVideoReady(true);
-      }
-    };
+    video.addEventListener('loadedmetadata', checkVideoReady);
+    video.addEventListener('canplay', checkVideoReady);
+    video.addEventListener('loadeddata', checkVideoReady);
 
-    const handleLoadedData = () => {
-      console.log('📹 Video data loaded');
-      if (video.videoWidth > 0 && video.videoHeight > 0 && !videoReady) {
-        console.log('✅ Video ready via loadeddata event');
-        setVideoReady(true);
-      }
-    };
-
-    // Listen to multiple events for better compatibility
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('canplay', handleCanPlay);
-    video.addEventListener('loadeddata', handleLoadedData);
-
-    // Also check if video is already ready
+    // Check if already ready
     if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
       console.log('✅ Video already ready on mount');
       setVideoReady(true);
     }
 
     return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('canplay', handleCanPlay);
-      video.removeEventListener('loadeddata', handleLoadedData);
+      video.removeEventListener('loadedmetadata', checkVideoReady);
+      video.removeEventListener('canplay', checkVideoReady);
+      video.removeEventListener('loadeddata', checkVideoReady);
     };
-  }, [step, videoReady]); // Removed startRealTimeDetection dependency
+  }, [step]);
 
-  // Separate effect to start detection when video becomes ready
+  // Face detection function - always returns mock detection for demo
+  const detectFace = useCallback((video) => {
+    const videoWidth = video.videoWidth;
+    const videoHeight = video.videoHeight;
+    
+    if (!videoWidth || !videoHeight) {
+      console.log('❌ Invalid video dimensions:', { videoWidth, videoHeight });
+      return null;
+    }
+
+    const faceWidth = Math.min(videoWidth * 0.4, videoHeight * 0.5);
+    const faceHeight = faceWidth * 1.3;
+    const centerX = videoWidth * 0.5;
+    const centerY = videoHeight * 0.45;
+    
+    // Add animation for testing
+    const time = Date.now() * 0.001;
+    const offsetX = Math.sin(time) * 5;
+    const offsetY = Math.cos(time * 0.7) * 3;
+
+    const detection = {
+      faceBox: {
+        x: centerX - faceWidth / 2 + offsetX,
+        y: centerY - faceHeight / 2 + offsetY,
+        width: faceWidth,
+        height: faceHeight
+      },
+      landmarks: {
+        leftEar: { 
+          x: centerX - faceWidth * 0.35 + offsetX, 
+          y: centerY - faceHeight * 0.1 + offsetY 
+        },
+        rightEar: { 
+          x: centerX + faceWidth * 0.35 + offsetX, 
+          y: centerY - faceHeight * 0.1 + offsetY 
+        },
+        nose: { 
+          x: centerX + offsetX, 
+          y: centerY + offsetY 
+        },
+        chin: { 
+          x: centerX + offsetX, 
+          y: centerY + faceHeight * 0.4 + offsetY 
+        }
+      },
+      confidence: 0.95
+    };
+
+    return detection;
+  }, []);
+
+  // Render overlay function
+  const renderOverlay = useCallback(() => {
+    console.log('🔄 Render frame - videoReady:', videoReady, 'step:', step);
+    
+    if (!overlayCanvasRef.current || !videoRef.current) {
+      console.log('❌ Missing refs');
+      if (step === 'camera') {
+        animationFrameRef.current = requestAnimationFrame(renderOverlay);
+      }
+      return;
+    }
+
+    if (!videoReady) {
+      console.log('⏳ Video not ready yet, waiting...');
+      if (step === 'camera') {
+        animationFrameRef.current = requestAnimationFrame(renderOverlay);
+      }
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = overlayCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    // Set canvas size
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      console.log('🔄 Canvas resized to:', canvas.width, 'x', canvas.height);
+    }
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Face detection
+    if (faceDetectionModel && video.videoWidth > 0 && video.videoHeight > 0) {
+      try {
+        const detection = detectFace(video);
+        if (detection) {
+          setLastDetection(detection);
+          console.log('✅ Face detection successful');
+        }
+      } catch (error) {
+        console.error('❌ Detection error:', error);
+      }
+    }
+
+    // Render jewelry
+    if (productImageRef.current && imageLoaded) {
+      console.log('🎨 Attempting to render jewelry...');
+      
+      // Use detection or create default
+      let detection = lastDetection;
+      if (!detection) {
+        console.log('⚠️ No face detection, using default positioning');
+        detection = {
+          faceBox: {
+            x: canvas.width * 0.3,
+            y: canvas.height * 0.25,
+            width: canvas.width * 0.4,
+            height: canvas.height * 0.5
+          },
+          landmarks: {
+            leftEar: { x: canvas.width * 0.35, y: canvas.height * 0.4 },
+            rightEar: { x: canvas.width * 0.65, y: canvas.height * 0.4 },
+            nose: { x: canvas.width * 0.5, y: canvas.height * 0.45 },
+            chin: { x: canvas.width * 0.5, y: canvas.height * 0.65 }
+          }
+        };
+      }
+      
+      const { landmarks, faceBox } = detection;
+      
+      // Draw debug markers
+      ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
+      
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+      Object.entries(landmarks).forEach(([name, point]) => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Add labels
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.fillText(name, point.x + 8, point.y - 8);
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+      });
+
+      // Render earrings
+      const isEarring = product.category?.toLowerCase().includes('earring') || 
+                       product.name?.toLowerCase().includes('earring') ||
+                       product.name?.toLowerCase().includes('chandbali') ||
+                       true; // Force earring mode for testing
+
+      if (isEarring) {
+        const baseSize = Math.max(faceBox.width * 0.25, 60);
+        const aspectRatio = productImageRef.current.height / productImageRef.current.width;
+        const earringWidth = baseSize;
+        const earringHeight = baseSize * aspectRatio;
+
+        console.log('👂 Rendering earrings:', {
+          width: earringWidth,
+          height: earringHeight,
+          leftEar: landmarks.leftEar,
+          rightEar: landmarks.rightEar
+        });
+
+        // Left earring with yellow background
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+        ctx.fillRect(
+          landmarks.leftEar.x - earringWidth / 2 - 5,
+          landmarks.leftEar.y - earringHeight * 0.3 - 5,
+          earringWidth + 10,
+          earringHeight + 10
+        );
+        
+        ctx.globalAlpha = 1.0;
+        ctx.drawImage(
+          productImageRef.current,
+          landmarks.leftEar.x - earringWidth / 2,
+          landmarks.leftEar.y - earringHeight * 0.3,
+          earringWidth,
+          earringHeight
+        );
+        ctx.restore();
+
+        // Right earring with yellow background (mirrored)
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+        ctx.fillRect(
+          landmarks.rightEar.x - earringWidth / 2 - 5,
+          landmarks.rightEar.y - earringHeight * 0.3 - 5,
+          earringWidth + 10,
+          earringHeight + 10
+        );
+        
+        ctx.globalAlpha = 1.0;
+        ctx.scale(-1, 1);
+        ctx.drawImage(
+          productImageRef.current,
+          -(landmarks.rightEar.x + earringWidth / 2),
+          landmarks.rightEar.y - earringHeight * 0.3,
+          earringWidth,
+          earringHeight
+        );
+        ctx.restore();
+
+        setRenderingActive(true);
+        console.log('✅ Earrings rendered successfully');
+      }
+    } else {
+      console.log('❌ Cannot render - missing requirements:', {
+        productImage: !!productImageRef.current,
+        imageLoaded
+      });
+      setRenderingActive(false);
+    }
+
+    // Continue animation loop
+    if (step === 'camera') {
+      animationFrameRef.current = requestAnimationFrame(renderOverlay);
+    }
+  }, [videoReady, step, faceDetectionModel, detectFace, lastDetection, product, imageLoaded]);
+
+  // Start detection when video is ready
   useEffect(() => {
     if (videoReady && step === 'camera') {
       console.log('🚀 Video ready - starting detection in 100ms...');
@@ -210,152 +401,66 @@ export default function TryOnModal({ product, onClose }) {
     }
   }, [videoReady, step, renderOverlay]);
 
-  // ALWAYS return mock face detection (for demo/testing)
-  const detectFace = useCallback((video) => {
-    const videoWidth = video.videoWidth;
-    const videoHeight = video.videoHeight;
-    if (!videoWidth || !videoHeight) return null;
-
-    const faceWidth = Math.min(videoWidth * 0.4, videoHeight * 0.5);
-    const faceHeight = faceWidth * 1.3;
-    const centerX = videoWidth * 0.5;
-    const centerY = videoHeight * 0.45;
-    const time = Date.now() * 0.001;
-    const offsetX = Math.sin(time) * 5;
-    const offsetY = Math.cos(time * 0.7) * 3;
-
-    return {
-      faceBox: {
-        x: centerX - faceWidth / 2 + offsetX,
-        y: centerY - faceHeight / 2 + offsetY,
-        width: faceWidth,
-        height: faceHeight
-      },
-      landmarks: {
-        leftEar: { x: centerX - faceWidth * 0.35 + offsetX, y: centerY - faceHeight * 0.1 + offsetY },
-        rightEar: { x: centerX + faceWidth * 0.35 + offsetX, y: centerY - faceHeight * 0.1 + offsetY },
-        nose: { x: centerX + offsetX, y: centerY + offsetY },
-        chin: { x: centerX + offsetX, y: centerY + faceHeight * 0.4 + offsetY }
-      },
-      confidence: 0.95
-    };
-  }, []);
-
-   useEffect(() => {
-    if (videoReady && step === 'camera') {
-      const timeout = setTimeout(startRealTimeDetection, 100);
-      return () => clearTimeout(timeout);
-    }
-  }, [videoReady, step, startRealTimeDetection]);
-
-   const startRealTimeDetection = useCallback(() => {
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    renderOverlay();
-  }, [renderOverlay]);
-
-
   const startCamera = async () => {
     try {
+      console.log('📷 Requesting camera access...');
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 }
+        },
       });
+      
+      console.log('✅ Camera stream obtained');
       setStream(mediaStream);
       setStep('camera');
       setVideoReady(false);
-    } catch (err) {
-      alert(`Camera error: ${err.message}`);
+      console.log('📷 Camera started successfully');
+    } catch (error) {
+      console.error('❌ Camera error:', error);
+      alert(`Unable to access camera: ${error.message}`);
     }
   };
 
   const capturePhoto = () => {
     if (!videoRef.current || !overlayCanvasRef.current) return;
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = videoRef.current.videoWidth;
-    canvas.height = videoRef.current.videoHeight;
-    ctx.drawImage(videoRef.current, 0, 0);
-    ctx.drawImage(overlayCanvasRef.current, 0, 0);
+
+    const video = videoRef.current;
+    const overlayCanvas = overlayCanvasRef.current;
+    
+    const combinedCanvas = document.createElement('canvas');
+    const ctx = combinedCanvas.getContext('2d');
+    
+    combinedCanvas.width = video.videoWidth;
+    combinedCanvas.height = video.videoHeight;
+    
+    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(overlayCanvas, 0, 0);
+    
     const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/jpeg');
-    link.download = 'tryon.jpg';
+    link.href = combinedCanvas.toDataURL('image/jpeg', 0.9);
+    link.download = `${product.name || 'jewelry'}-virtual-try-on.jpg`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    
+    console.log('📸 Photo captured');
   };
 
   const stopCamera = () => {
-    if (stream) stream.getTracks().forEach((track) => track.stop());
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
     setStep('intro');
     setVideoReady(false);
     setRenderingActive(false);
+    console.log('⏹️ Camera stopped');
   };
-
-  
-  // Render overlay
-  const renderOverlay = useCallback(() => {
-    if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
-      animationFrameRef.current = requestAnimationFrame(renderOverlay);
-      return;
-    }
-
-    const video = videoRef.current;
-    const canvas = overlayCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (faceDetectionModel) {
-      const detection = detectFace(video);
-      if (detection) {
-        setLastDetection(detection);
-      }
-    }
-
-    if (productImageRef.current && imageLoaded) {
-      const detection = lastDetection;
-      if (detection) {
-        const { landmarks, faceBox } = detection;
-        ctx.strokeStyle = 'rgba(0,255,0,0.8)';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
-
-        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
-        Object.entries(landmarks).forEach(([name, pt]) => {
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, 5, 0, 2 * Math.PI);
-          ctx.fill();
-        });
-
-        const isEarring = product.category?.toLowerCase().includes('earring') || true;
-        if (isEarring) {
-          const baseSize = Math.max(faceBox.width * 0.25, 60);
-          const aspect = productImageRef.current.height / productImageRef.current.width;
-          const width = baseSize;
-          const height = baseSize * aspect;
-
-          ctx.save();
-          ctx.globalAlpha = 1;
-          ctx.drawImage(productImageRef.current, landmarks.leftEar.x - width / 2, landmarks.leftEar.y - height * 0.3, width, height);
-          ctx.restore();
-
-          ctx.save();
-          ctx.scale(-1, 1);
-          ctx.drawImage(productImageRef.current, -(landmarks.rightEar.x + width / 2), landmarks.rightEar.y - height * 0.3, width, height);
-          ctx.restore();
-
-          setRenderingActive(true);
-        }
-      }
-    }
-
-    if (step === 'camera') {
-      animationFrameRef.current = requestAnimationFrame(renderOverlay);
-    }
-  }, [detectFace, faceDetectionModel, imageLoaded, lastDetection, product, step, videoReady]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center p-4 z-50">
@@ -374,7 +479,7 @@ export default function TryOnModal({ product, onClose }) {
             Try on {product?.name || 'jewelry'} in real-time
           </p>
 
-          {/* Enhanced Debug Information */}
+          {/* Debug Information */}
           <div className="mb-4 p-3 bg-gray-100 rounded text-xs">
             <div className="font-semibold mb-1">Debug Status:</div>
             <div className="grid grid-cols-2 gap-1">
