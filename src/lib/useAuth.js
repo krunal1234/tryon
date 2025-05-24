@@ -114,7 +114,7 @@ export const AuthProvider = ({ children }) => {
         
         router.push('/vendor/dashboard');
       } else {
-        router.push('/dashboard');
+        router.push('/app/dashboard');
       }
 
       return data.user;
