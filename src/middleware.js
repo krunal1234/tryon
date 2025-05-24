@@ -13,7 +13,7 @@ export async function middleware(req) {
   const path = req.nextUrl.pathname;
 
   // Protected routes that require authentication
-  const protectedRoutes = ['/dashboard', '/vendor/dashboard', '/vendor/products', '/vendor/create-product', '/vendor/inquiries', '/profile', '/favorites'];
+  const protectedRoutes = ['/app/dashboard', '/vendor/dashboard', '/vendor/products', '/vendor/create-product', '/vendor/inquiries', '/profile', '/favorites'];
   const vendorRoutes = ['/vendor/dashboard', '/vendor/products', '/vendor/create-product', '/vendor/inquiries'];
   const authRoutes = ['/login', '/register', '/vendor/login', '/vendor/register'];
 
@@ -44,7 +44,7 @@ export async function middleware(req) {
       const hasVendorRole = userRoles?.some(ur => ur.roles.name === 'vendor' || ur.roles.name === 'admin');
       
       if (!hasVendorRole) {
-        return NextResponse.redirect(new URL('/dashboard', req.url));
+        return NextResponse.redirect(new URL('/app/dashboard', req.url));
       }
     } catch (error) {
       console.error('Error checking vendor role in middleware:', error);
@@ -65,12 +65,12 @@ export async function middleware(req) {
         .eq('user_id', session.user.id);
 
       const hasVendorRole = userRoles?.some(ur => ur.roles.name === 'vendor');
-      const redirectUrl = hasVendorRole ? '/vendor/dashboard' : '/dashboard';
+      const redirectUrl = hasVendorRole ? '/vendor/dashboard' : '/app/dashboard';
       
       return NextResponse.redirect(new URL(redirectUrl, req.url));
     } catch (error) {
       console.error('Error in auth redirect:', error);
-      return NextResponse.redirect(new URL('/dashboard', req.url));
+      return NextResponse.redirect(new URL('/app/dashboard', req.url));
     }
   }
   
@@ -79,7 +79,7 @@ export async function middleware(req) {
 
 export const config = {
   matcher: [
-    '/dashboard/:path*',
+    '/app/dashboard/:path*',
     '/vendor/:path*', 
     '/login', 
     '/register', 
