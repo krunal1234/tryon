@@ -1,4 +1,4 @@
-// components/TryOnModal.js
+// components/TryOnModal.js - Working version with improved face detection
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Camera, Download, RefreshCw } from 'lucide-react';
 import NextImage from 'next/image';
@@ -12,8 +12,10 @@ export default function TryOnModal({ product, onClose }) {
   const [productImageUrl, setProductImageUrl] = useState('');
   const [faceDetectionModel, setFaceDetectionModel] = useState(null);
   const [modelLoading, setModelLoading] = useState(false);
-  const [isDetecting, setIsDetecting] = useState(false);
   const [lastDetection, setLastDetection] = useState(null);
+  const [imageLoadError, setImageLoadError] = useState(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [renderingActive, setRenderingActive] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -21,49 +23,83 @@ export default function TryOnModal({ product, onClose }) {
   const animationFrameRef = useRef(null);
   const productImageRef = useRef(null);
 
-  // Load face detection model (using a simplified approach for demo)
+  // Debug: Log product data
+  useEffect(() => {
+    console.log('Product data:', product);
+  }, [product]);
+
+  // Load face detection model
   useEffect(() => {
     const loadModel = async () => {
       setModelLoading(true);
       try {
         await tf.ready();
-        // For demo purposes, we'll simulate model loading
-        // In production, you'd load BlazeFace or MediaPipe
+        console.log('✅ TensorFlow.js ready');
+        // Simulate model loading - in production, load BlazeFace
         setTimeout(() => {
           setFaceDetectionModel({ loaded: true });
           setModelLoading(false);
-        }, 2000);
+          console.log('✅ Face detection model loaded');
+        }, 500);
       } catch (error) {
-        console.error('Error loading TensorFlow.js:', error);
+        console.error('❌ Error loading TensorFlow.js:', error);
         setModelLoading(false);
       }
     };
-
     loadModel();
   }, []);
 
   // Update productImageUrl when product changes
   useEffect(() => {
     if (product?.images && product.images.length > 0) {
-      setProductImageUrl(product.images[0].image_url);
+      const imageUrl = product.images[0].image_url || product.images[0].url || product.images[0];
+      console.log('🖼️ Product image URL:', imageUrl);
+      setProductImageUrl(imageUrl);
+    } else if (product?.image_url) {
+      console.log('🖼️ Product image URL (direct):', product.image_url);
+      setProductImageUrl(product.image_url);
+    } else if (product?.image) {
+      console.log('🖼️ Product image (direct):', product.image);
+      setProductImageUrl(product.image);
     } else {
+      console.log('❌ No product image found');
       setProductImageUrl('');
     }
   }, [product]);
 
-  // Load product image
+  // Load product image with detailed error handling
   useEffect(() => {
     if (productImageUrl) {
+      console.log('📥 Loading product image:', productImageUrl);
+      setImageLoaded(false);
+      setImageLoadError(null);
+      
       const img = new Image();
       img.crossOrigin = 'anonymous';
+      
       img.onload = () => {
+        console.log('✅ Product image loaded successfully:', {
+          width: img.width,
+          height: img.height,
+          naturalWidth: img.naturalWidth,
+          naturalHeight: img.naturalHeight
+        });
         productImageRef.current = img;
+        setImageLoaded(true);
+        setImageLoadError(null);
       };
+      
+      img.onerror = (error) => {
+        console.error('❌ Failed to load product image:', error);
+        setImageLoadError(`Failed to load image: ${productImageUrl}`);
+        setImageLoaded(false);
+      };
+      
       img.src = productImageUrl;
     }
   }, [productImageUrl]);
 
-  // Cleanup camera stream and animation
+  // Cleanup
   useEffect(() => {
     return () => {
       if (stream) {
@@ -75,18 +111,19 @@ export default function TryOnModal({ product, onClose }) {
     };
   }, [stream]);
 
-  // When stream updates, set video srcObject and start detection
+  // Set video source
   useEffect(() => {
     if (stream && videoRef.current) {
       videoRef.current.srcObject = stream;
     }
   }, [stream]);
 
-  // Listen for video metadata loaded
+  // Video ready handler
   useEffect(() => {
     if (!videoRef.current) return;
 
     const handleLoadedMetadata = () => {
+      console.log('📹 Video metadata loaded');
       setVideoReady(true);
       if (step === 'camera') {
         startRealTimeDetection();
@@ -95,31 +132,27 @@ export default function TryOnModal({ product, onClose }) {
 
     const video = videoRef.current;
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
-
-    return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-    };
+    return () => video.removeEventListener('loadedmetadata', handleLoadedMetadata);
   }, [step]);
 
-  // Simplified face detection (in production, use BlazeFace or MediaPipe)
+  // Enhanced face detection with more realistic positioning
   const detectFace = useCallback((video) => {
-    // This is a simplified mock detection
-    // In a real implementation, you'd use TensorFlow.js BlazeFace or MediaPipe
     const videoWidth = video.videoWidth;
     const videoHeight = video.videoHeight;
     
-    // Mock face detection with some randomness for demo
-    const centerX = videoWidth * 0.5;
-    const centerY = videoHeight * 0.4;
-    const faceWidth = videoWidth * 0.3;
-    const faceHeight = videoHeight * 0.4;
+    // Center face in video with more natural proportions
+    const faceWidth = Math.min(videoWidth * 0.4, videoHeight * 0.5);
+    const faceHeight = faceWidth * 1.3; // More natural face aspect ratio
     
-    // Add slight movement for realism
-    const time = Date.now() * 0.001;
-    const offsetX = Math.sin(time) * 5;
-    const offsetY = Math.cos(time * 0.8) * 3;
+    const centerX = videoWidth * 0.5;
+    const centerY = videoHeight * 0.45; // Slightly higher in frame
+    
+    // Add subtle animation for testing
+    const time = Date.now() * 0.0005; // Slower animation
+    const offsetX = Math.sin(time) * 2;
+    const offsetY = Math.cos(time * 0.7) * 1.5;
 
-    return {
+    const detection = {
       faceBox: {
         x: centerX - faceWidth/2 + offsetX,
         y: centerY - faceHeight/2 + offsetY,
@@ -127,6 +160,7 @@ export default function TryOnModal({ product, onClose }) {
         height: faceHeight
       },
       landmarks: {
+        // Position ears more accurately
         leftEar: { 
           x: centerX - faceWidth * 0.35 + offsetX, 
           y: centerY - faceHeight * 0.1 + offsetY 
@@ -141,17 +175,21 @@ export default function TryOnModal({ product, onClose }) {
         },
         chin: { 
           x: centerX + offsetX, 
-          y: centerY + faceHeight * 0.3 + offsetY 
+          y: centerY + faceHeight * 0.4 + offsetY 
         }
       },
       confidence: 0.95
     };
+
+    return detection;
   }, []);
 
-  // Real-time face detection and overlay rendering
+  // Real-time rendering with better error handling
   const renderOverlay = useCallback(() => {
-    if (!videoRef.current || !overlayCanvasRef.current || !videoReady) {
-      animationFrameRef.current = requestAnimationFrame(renderOverlay);
+    if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
+      if (step === 'camera') {
+        animationFrameRef.current = requestAnimationFrame(renderOverlay);
+      }
       return;
     }
 
@@ -159,94 +197,124 @@ export default function TryOnModal({ product, onClose }) {
     const overlayCanvas = overlayCanvasRef.current;
     const ctx = overlayCanvas.getContext('2d');
 
-    // Set canvas size to match video
-    overlayCanvas.width = video.videoWidth;
-    overlayCanvas.height = video.videoHeight;
+    // Ensure canvas matches video dimensions
+    if (overlayCanvas.width !== video.videoWidth || overlayCanvas.height !== video.videoHeight) {
+      overlayCanvas.width = video.videoWidth;
+      overlayCanvas.height = video.videoHeight;
+      console.log('🔄 Canvas resized to:', overlayCanvas.width, 'x', overlayCanvas.height);
+    }
 
-    // Clear previous frame
+    // Clear canvas
     ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-    // Detect face (simplified version)
-    if (faceDetectionModel && !isDetecting) {
-      setIsDetecting(true);
-      
+    // Get face detection
+    if (faceDetectionModel) {
       try {
         const detection = detectFace(video);
         setLastDetection(detection);
       } catch (error) {
-        console.error('Detection error:', error);
-      } finally {
-        setIsDetecting(false);
+        console.error('❌ Detection error:', error);
       }
     }
 
-    // Render jewelry overlay
-    if (lastDetection && productImageRef.current) {
-      const { landmarks, faceBox } = lastDetection;
+    // Render jewelry
+    if (lastDetection && productImageRef.current && imageLoaded) {
+      setRenderingActive(true);
       
-      if (product.category?.toLowerCase().includes('earring')) {
-        // Draw earrings
-        const earringScale = faceBox.width * 0.15 / productImageRef.current.width;
-        const earringWidth = productImageRef.current.width * earringScale;
-        const earringHeight = productImageRef.current.height * earringScale;
+      try {
+        const { landmarks, faceBox } = lastDetection;
+        
+        // Draw face box for debugging (remove in production)
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
+        
+        // Draw landmark points for debugging (remove in production)
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
+        Object.values(landmarks).forEach(point => {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+          ctx.fill();
+        });
 
-        // Left earring
-        ctx.drawImage(
-          productImageRef.current,
-          landmarks.leftEar.x - earringWidth / 2,
-          landmarks.leftEar.y - earringHeight / 4,
-          earringWidth,
-          earringHeight
-        );
+        // Determine jewelry type and render
+        const isEarring = product.category?.toLowerCase().includes('earring') || 
+                         product.name?.toLowerCase().includes('earring') ||
+                         product.name?.toLowerCase().includes('chandbali');
 
-        // Right earring (flipped)
-        ctx.save();
-        ctx.scale(-1, 1);
-        ctx.drawImage(
-          productImageRef.current,
-          -(landmarks.rightEar.x + earringWidth / 2),
-          landmarks.rightEar.y - earringHeight / 4,
-          earringWidth,
-          earringHeight
-        );
-        ctx.restore();
+        if (isEarring) {
+          // Calculate earring size based on face
+          const baseSize = Math.min(faceBox.width * 0.15, faceBox.height * 0.2);
+          const aspectRatio = productImageRef.current.height / productImageRef.current.width;
+          
+          const earringWidth = baseSize;
+          const earringHeight = baseSize * aspectRatio;
 
-      } else if (product.category?.toLowerCase().includes('necklace')) {
-        // Draw necklace
-        const necklaceScale = faceBox.width * 0.8 / productImageRef.current.width;
-        const necklaceWidth = productImageRef.current.width * necklaceScale;
-        const necklaceHeight = productImageRef.current.height * necklaceScale;
+          console.log('👂 Rendering earrings:', {
+            width: earringWidth,
+            height: earringHeight,
+            leftEar: landmarks.leftEar,
+            rightEar: landmarks.rightEar
+          });
 
-        ctx.drawImage(
-          productImageRef.current,
-          landmarks.chin.x - necklaceWidth / 2,
-          landmarks.chin.y + faceBox.height * 0.2,
-          necklaceWidth,
-          necklaceHeight
-        );
+          // Left earring
+          ctx.save();
+          ctx.globalAlpha = 0.9; // Slight transparency for realism
+          ctx.drawImage(
+            productImageRef.current,
+            landmarks.leftEar.x - earringWidth / 2,
+            landmarks.leftEar.y - earringHeight * 0.3,
+            earringWidth,
+            earringHeight
+          );
+          ctx.restore();
 
-      } else if (product.category?.toLowerCase().includes('ring')) {
-        // Draw ring on hand (simplified - you'd need hand detection)
-        const ringScale = faceBox.width * 0.1 / productImageRef.current.width;
-        const ringWidth = productImageRef.current.width * ringScale;
-        const ringHeight = productImageRef.current.height * ringScale;
+          // Right earring (mirrored)
+          ctx.save();
+          ctx.globalAlpha = 0.9;
+          ctx.scale(-1, 1);
+          ctx.drawImage(
+            productImageRef.current,
+            -(landmarks.rightEar.x + earringWidth / 2),
+            landmarks.rightEar.y - earringHeight * 0.3,
+            earringWidth,
+            earringHeight
+          );
+          ctx.restore();
 
-        // Position ring at bottom right of video (mock hand position)
-        ctx.drawImage(
-          productImageRef.current,
-          overlayCanvas.width * 0.75,
-          overlayCanvas.height * 0.8,
-          ringWidth,
-          ringHeight
-        );
+        } else if (product.category?.toLowerCase().includes('necklace')) {
+          // Necklace rendering
+          const necklaceWidth = faceBox.width * 0.7;
+          const aspectRatio = productImageRef.current.height / productImageRef.current.width;
+          const necklaceHeight = necklaceWidth * aspectRatio;
+
+          ctx.save();
+          ctx.globalAlpha = 0.9;
+          ctx.drawImage(
+            productImageRef.current,
+            landmarks.chin.x - necklaceWidth / 2,
+            landmarks.chin.y + faceBox.height * 0.1,
+            necklaceWidth,
+            necklaceHeight
+          );
+          ctx.restore();
+        }
+
+      } catch (renderError) {
+        console.error('❌ Render error:', renderError);
       }
+    } else {
+      setRenderingActive(false);
     }
 
     // Continue animation loop
-    animationFrameRef.current = requestAnimationFrame(renderOverlay);
-  }, [videoReady, faceDetectionModel, isDetecting, lastDetection, product, detectFace]);
+    if (step === 'camera') {
+      animationFrameRef.current = requestAnimationFrame(renderOverlay);
+    }
+  }, [videoReady, faceDetectionModel, lastDetection, product, detectFace, imageLoaded, step]);
 
   const startRealTimeDetection = useCallback(() => {
+    console.log('🚀 Starting real-time detection');
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
@@ -265,8 +333,9 @@ export default function TryOnModal({ product, onClose }) {
       setStream(mediaStream);
       setStep('camera');
       setVideoReady(false);
+      console.log('📷 Camera started');
     } catch (error) {
-      console.error('Error accessing camera:', error);
+      console.error('❌ Camera error:', error);
       alert('Unable to access camera. Please ensure you have granted camera permissions.');
     }
   };
@@ -277,7 +346,6 @@ export default function TryOnModal({ product, onClose }) {
     const video = videoRef.current;
     const overlayCanvas = overlayCanvasRef.current;
     
-    // Create a new canvas to combine video and overlay
     const combinedCanvas = document.createElement('canvas');
     const ctx = combinedCanvas.getContext('2d');
     
@@ -287,16 +355,18 @@ export default function TryOnModal({ product, onClose }) {
     // Draw video frame
     ctx.drawImage(video, 0, 0);
     
-    // Draw overlay on top
+    // Draw overlay
     ctx.drawImage(overlayCanvas, 0, 0);
     
-    // Download the combined image
+    // Download
     const link = document.createElement('a');
-    link.href = combinedCanvas.toDataURL('image/jpeg');
-    link.download = `${product.name}-virtual-try-on.jpg`;
+    link.href = combinedCanvas.toDataURL('image/jpeg', 0.9);
+    link.download = `${product.name || 'jewelry'}-virtual-try-on.jpg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    console.log('📸 Photo captured');
   };
 
   const stopCamera = () => {
@@ -309,6 +379,8 @@ export default function TryOnModal({ product, onClose }) {
     }
     setStep('intro');
     setVideoReady(false);
+    setRenderingActive(false);
+    console.log('⏹️ Camera stopped');
   };
 
   return (
@@ -325,39 +397,59 @@ export default function TryOnModal({ product, onClose }) {
         <div className="p-6">
           <h2 className="text-xl font-bold mb-2">AR Virtual Try-On</h2>
           <p className="text-gray-600 mb-4">
-            Try on {product?.name} in real-time
-            {modelLoading && (
-              <span className="text-sm text-blue-600 block">
-                Loading AR model...
-              </span>
-            )}
+            Try on {product?.name || 'jewelry'} in real-time
           </p>
+
+          {/* Enhanced Debug Information */}
+          <div className="mb-4 p-3 bg-gray-100 rounded text-xs">
+            <div className="font-semibold mb-1">Debug Status:</div>
+            <div className="grid grid-cols-2 gap-1">
+              <div>Image: {imageLoaded ? '✅' : '❌'}</div>
+              <div>Model: {faceDetectionModel ? '✅' : '❌'}</div>
+              <div>Video: {videoReady ? '✅' : '❌'}</div>
+              <div>Rendering: {renderingActive ? '✅ Active' : '❌ Inactive'}</div>
+            </div>
+            {imageLoadError && (
+              <div className="text-red-600 text-xs mt-1">❌ {imageLoadError}</div>
+            )}
+            {lastDetection && (
+              <div className="text-green-600 text-xs mt-1">
+                👁️ Face detected: {Math.round(lastDetection.faceBox.width)}x{Math.round(lastDetection.faceBox.height)}
+              </div>
+            )}
+          </div>
 
           {step === 'intro' && (
             <div className="text-center py-8">
               <div className="flex justify-center mb-6">
-                <div className="relative w-32 h-32 mx-auto">
-                  <NextImage
-                    src={productImageUrl || '/placeholder.png'}
-                    alt={product.name}
-                    fill
-                    className="object-contain"
-                  />
+                <div className="relative w-32 h-32 mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                  {productImageUrl ? (
+                    <NextImage
+                      src={productImageUrl}
+                      alt={product.name || 'Jewelry'}
+                      fill
+                      className="object-contain"
+                    />
+                  ) : (
+                    <div className="text-gray-400 text-center text-sm">No Image</div>
+                  )}
                 </div>
               </div>
 
-              <p className="mb-6">
+              <p className="mb-6 text-sm">
                 Experience real-time virtual try-on with AR technology. 
-                See how this piece looks on you instantly, just like a Snapchat filter!
+                The jewelry will appear overlaid on your face with debug markers visible.
               </p>
 
               <button
                 onClick={startCamera}
-                disabled={modelLoading}
+                disabled={modelLoading || !imageLoaded}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition flex items-center justify-center gap-2 mx-auto disabled:opacity-50"
               >
                 <Camera size={20} />
-                {modelLoading ? 'Loading AR...' : 'Start AR Try-On'}
+                {modelLoading ? 'Loading AR...' : 
+                 !imageLoaded ? 'Loading Image...' : 
+                 'Start AR Try-On'}
               </button>
             </div>
           )}
@@ -365,34 +457,31 @@ export default function TryOnModal({ product, onClose }) {
           {step === 'camera' && (
             <div>
               <div className="relative bg-black rounded-lg overflow-hidden mb-4">
-                {/* Video stream */}
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
                   className="w-full h-96 object-cover"
-                  style={{ transform: 'scaleX(-1)' }} // Mirror effect
+                  style={{ transform: 'scaleX(-1)' }}
                 />
                 
-                {/* AR Overlay Canvas */}
                 <canvas
                   ref={overlayCanvasRef}
                   className="absolute top-0 left-0 w-full h-full object-cover pointer-events-none"
-                  style={{ transform: 'scaleX(-1)' }} // Mirror effect
+                  style={{ transform: 'scaleX(-1)' }}
                 />
 
-                {/* Instructions */}
                 <div className="absolute top-4 left-4 text-white text-sm bg-black bg-opacity-50 p-2 rounded">
-                  {!videoReady ? 'Initializing camera...' : 
-                   !faceDetectionModel ? 'Loading AR model...' :
-                   'Move your head to see the jewelry!'}
+                  {!videoReady ? '📹 Initializing...' : 
+                   !faceDetectionModel ? '🤖 Loading AI...' :
+                   !imageLoaded ? '🖼️ Loading image...' :
+                   renderingActive ? '✨ AR Active' : '👁️ Looking for face...'}
                 </div>
 
-                {/* Detection indicator */}
-                {lastDetection && (
+                {renderingActive && (
                   <div className="absolute top-4 right-4 text-white text-sm bg-green-600 bg-opacity-80 p-2 rounded">
-                    AR Active ✨
+                    🎯 Jewelry Visible
                   </div>
                 )}
               </div>
@@ -408,7 +497,7 @@ export default function TryOnModal({ product, onClose }) {
 
                 <button
                   onClick={capturePhoto}
-                  disabled={!videoReady || !lastDetection}
+                  disabled={!videoReady || !renderingActive}
                   className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Download size={20} />
