@@ -261,26 +261,27 @@ export default function TryOnModal({ product, onClose }) {
   }, [step]);
 
   // Real face detection function
-  const detectFace = useCallback(async (video) => {
-    if (!faceDetectionModel || !video || video.videoWidth === 0) {
-      return null;
-    }
+  const detectFace = async (videoEl) => {
+  const detection = await faceapi
+    .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks();
 
-    try {
-      const faces = await faceDetectionModel.detectFaces(video);
-      
-      if (faces && faces.length > 0) {
-        const face = faces[0]; // Use first detected face
-        setDetectionConfidence(face.confidence);
-        return face;
-      }
-    } catch (error) {
-      console.error('Face detection error:', error);
-    }
-    
-    setDetectionConfidence(0);
-    return null;
-  }, [faceDetectionModel]);
+  if (!detection) return null;
+
+  const landmarks = detection.landmarks;
+
+  return {
+    leftEar: landmarks.getLeftEar(),
+    rightEar: landmarks.getRightEar(),
+    nose: landmarks.getNose()[3],
+    chin: landmarks.getJawOutline()[8],
+    forehead: landmarks.getForeheadPoint?.() || {
+      x: (landmarks.getLeftEye()[0].x + landmarks.getRightEye()[3].x) / 2,
+      y: landmarks.getLeftEye()[0].y - 50,
+    },
+    boundingBox: detection.detection.box
+  };
+};
 
   // Render overlay function
   const renderOverlay = useCallback(async () => {
@@ -391,12 +392,12 @@ export default function TryOnModal({ product, onClose }) {
     ctx.save();
     ctx.globalAlpha = 0.9;
     ctx.drawImage(
-      productImageRef.current,
-      landmarks.leftEar.x - earringWidth / 2,
-      landmarks.leftEar.y - earringHeight * 0.2,
-      earringWidth,
-      earringHeight
-    );
+  productImageRef.current,
+  leftEar.x - earringWidth / 2,
+  leftEar.y - earringHeight / 2,
+  earringWidth,
+  earringHeight
+);
     ctx.restore();
 
     // Right earring (mirrored)
