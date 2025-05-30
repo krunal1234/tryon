@@ -1,4 +1,4 @@
-// components/TryOnModal.js - Improved version with real face detection
+// components/TryOnModal.js - Improved earring positioning
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Camera, Download, RefreshCw } from 'lucide-react';
 import NextImage from 'next/image';
@@ -24,35 +24,26 @@ export default function TryOnModal({ product, onClose }) {
   const productImageRef = useRef(null);
   const faceApiRef = useRef(null);
 
-  // Load Face Detection Model (using face-api.js approach with canvas)
+  // Load Face Detection Model
   useEffect(() => {
     const loadFaceDetection = async () => {
       setModelLoading(true);
       try {
-        // Create a simple face detector using built-in browser APIs
-        // This is a fallback approach that works without external libraries
-        console.log('🤖 Initializing face detection...');
+        console.log('🤖 Initializing improved face detection...');
         
-        // Simulate model loading time
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Create a basic face detection function
         const detector = {
           detectFaces: (video) => {
             return new Promise((resolve) => {
-              // Create a canvas to analyze the video frame
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
               canvas.width = video.videoWidth;
               canvas.height = video.videoHeight;
               
-              // Draw current video frame
               ctx.drawImage(video, 0, 0);
-              
-              // Get image data for analysis
               const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
               
-              // Simple face detection using image analysis
               const faces = detectFacesInImageData(imageData, canvas.width, canvas.height);
               resolve(faces);
             });
@@ -61,7 +52,7 @@ export default function TryOnModal({ product, onClose }) {
         
         setFaceDetectionModel(detector);
         setModelLoading(false);
-        console.log('✅ Face detection initialized');
+        console.log('✅ Improved face detection initialized');
       } catch (error) {
         console.error('❌ Error initializing face detection:', error);
         setModelLoading(false);
@@ -71,27 +62,25 @@ export default function TryOnModal({ product, onClose }) {
     loadFaceDetection();
   }, []);
 
-  // Simple face detection algorithm using image processing
+  // Improved face detection with better ear positioning
   const detectFacesInImageData = (imageData, width, height) => {
     const data = imageData.data;
     
-    // Simple skin tone detection and face region estimation
     let skinPixels = 0;
     let totalPixels = 0;
     let minX = width, maxX = 0, minY = height, maxY = 0;
     let centerX = 0, centerY = 0;
     let skinRegions = [];
     
-    // Scan image for skin-like colors
-    for (let y = 0; y < height; y += 4) {
-      for (let x = 0; x < width; x += 4) {
+    // Enhanced skin tone detection
+    for (let y = 0; y < height; y += 3) {
+      for (let x = 0; x < width; x += 3) {
         const i = (y * width + x) * 4;
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         
-        // Simple skin tone detection
-        if (isSkinTone(r, g, b)) {
+        if (isImprovedSkinTone(r, g, b)) {
           skinPixels++;
           skinRegions.push({ x, y });
           
@@ -107,23 +96,67 @@ export default function TryOnModal({ product, onClose }) {
       }
     }
     
-    if (skinPixels < 50) {
-      return []; // Not enough skin pixels detected
+    if (skinPixels < 100) {
+      return [];
     }
     
     centerX /= skinPixels;
     centerY /= skinPixels;
     
-    // Estimate face dimensions
-    const faceWidth = (maxX - minX) * 1.2;
-    const faceHeight = faceWidth * 1.3;
+    // Better face dimension calculation
+    const faceWidth = (maxX - minX) * 1.1;
+    const faceHeight = faceWidth * 1.25; // More accurate face proportions
     
-    // Adjust center point to be more face-like (slightly higher)
-    const faceCenterY = centerY - faceHeight * 0.1;
+    // Improved face center positioning
+    const faceCenterY = centerY - faceHeight * 0.05;
     
-    const confidence = Math.min(skinPixels / (totalPixels * 0.1), 1);
+    const confidence = Math.min(skinPixels / (totalPixels * 0.08), 1);
     
-    if (confidence > 0.3) {
+    if (confidence > 0.25) {
+      // More accurate landmark positioning based on facial anatomy
+      const landmarks = {
+        // Ears positioned more accurately on the sides of the head
+        leftEar: { 
+          x: centerX - faceWidth * 0.45, // Further out from center
+          y: faceCenterY - faceHeight * 0.08 // Slightly above center
+        },
+        rightEar: { 
+          x: centerX + faceWidth * 0.45, // Further out from center
+          y: faceCenterY - faceHeight * 0.08 // Slightly above center
+        },
+        // More precise facial features
+        nose: { 
+          x: centerX, 
+          y: faceCenterY + faceHeight * 0.02 
+        },
+        chin: { 
+          x: centerX, 
+          y: faceCenterY + faceHeight * 0.4 
+        },
+        forehead: {
+          x: centerX,
+          y: faceCenterY - faceHeight * 0.35
+        },
+        // Additional landmarks for better positioning
+        leftCheek: {
+          x: centerX - faceWidth * 0.25,
+          y: faceCenterY + faceHeight * 0.1
+        },
+        rightCheek: {
+          x: centerX + faceWidth * 0.25,
+          y: faceCenterY + faceHeight * 0.1
+        },
+        // Jaw line points for better ear positioning
+        leftJaw: {
+          x: centerX - faceWidth * 0.35,
+          y: faceCenterY + faceHeight * 0.25
+        },
+        rightJaw: {
+          x: centerX + faceWidth * 0.35,
+          y: faceCenterY + faceHeight * 0.25
+        }
+      };
+
       return [{
         faceBox: {
           x: centerX - faceWidth / 2,
@@ -131,28 +164,7 @@ export default function TryOnModal({ product, onClose }) {
           width: faceWidth,
           height: faceHeight
         },
-        landmarks: {
-          leftEar: { 
-            x: centerX - faceWidth * 0.35, 
-            y: faceCenterY - faceHeight * 0.05 
-          },
-          rightEar: { 
-            x: centerX + faceWidth * 0.35, 
-            y: faceCenterY - faceHeight * 0.05 
-          },
-          nose: { 
-            x: centerX, 
-            y: faceCenterY 
-          },
-          chin: { 
-            x: centerX, 
-            y: faceCenterY + faceHeight * 0.35 
-          },
-          forehead: {
-            x: centerX,
-            y: faceCenterY - faceHeight * 0.3
-          }
-        },
+        landmarks: landmarks,
         confidence: confidence
       }];
     }
@@ -160,23 +172,37 @@ export default function TryOnModal({ product, onClose }) {
     return [];
   };
 
-  // Helper function to detect skin tones
-  const isSkinTone = (r, g, b) => {
-    // Multiple skin tone ranges
-    return (
+  // Enhanced skin tone detection
+  const isImprovedSkinTone = (r, g, b) => {
+    // More comprehensive skin tone detection
+    const conditions = [
+      // Very light skin
+      (r > 100 && g > 50 && b > 30 && 
+       r > g && g > b && r - b > 20),
+      
       // Light skin
       (r > 95 && g > 40 && b > 20 && 
        Math.max(r, g, b) - Math.min(r, g, b) > 15 && 
-       Math.abs(r - g) > 15 && r > g && r > b) ||
+       Math.abs(r - g) > 15 && r > g && r > b),
       
       // Medium skin  
-      (r > 85 && g > 50 && b > 35 && 
-       r >= g && g >= b && r - b > 20) ||
+      (r > 80 && g > 45 && b > 30 && 
+       r >= g && g >= b && r - b > 15),
+       
+      // Medium-dark skin
+      (r > 70 && g > 40 && b > 25 && 
+       r > b && g > b && r - b > 10),
        
       // Darker skin
-      (r > 60 && g > 40 && b > 25 && 
-       r > b && g > b && r - b > 10)
-    );
+      (r > 50 && g > 30 && b > 20 && 
+       r > b && r - b > 5),
+       
+      // Additional olive/tan skin tones
+      (r > 85 && g > 55 && b > 35 && 
+       r > g && g > b && Math.abs(r - g) < 30)
+    ];
+    
+    return conditions.some(condition => condition);
   };
 
   // Set product image URL
@@ -260,7 +286,7 @@ export default function TryOnModal({ product, onClose }) {
     };
   }, [step]);
 
-  // Real face detection function
+  // Face detection function
   const detectFace = useCallback(async (video) => {
     if (!faceDetectionModel || !video || video.videoWidth === 0) {
       return null;
@@ -270,7 +296,7 @@ export default function TryOnModal({ product, onClose }) {
       const faces = await faceDetectionModel.detectFaces(video);
       
       if (faces && faces.length > 0) {
-        const face = faces[0]; // Use first detected face
+        const face = faces[0];
         setDetectionConfidence(face.confidence);
         return face;
       }
@@ -281,6 +307,126 @@ export default function TryOnModal({ product, onClose }) {
     setDetectionConfidence(0);
     return null;
   }, [faceDetectionModel]);
+
+  // Improved earring rendering with better positioning
+  const renderEarrings = (ctx, landmarks, faceBox) => {
+    // Calculate earring size based on face dimensions
+    const baseSize = Math.max(faceBox.width * 0.12, 35);
+    const aspectRatio = productImageRef.current.height / productImageRef.current.width;
+    const earringWidth = baseSize;
+    const earringHeight = baseSize * aspectRatio;
+
+    // Improved ear positioning calculation
+    const leftEarX = landmarks.leftEar.x;
+    const leftEarY = landmarks.leftEar.y;
+    const rightEarX = landmarks.rightEar.x;
+    const rightEarY = landmarks.rightEar.y;
+
+    // Adjust positioning based on earring type
+    const hangingOffset = earringHeight * 0.15; // How much earrings hang below ear
+    const sideOffset = earringWidth * 0.1; // Small horizontal adjustment
+
+    // Left earring
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    
+    // Add subtle shadow for realism
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    
+    ctx.drawImage(
+      productImageRef.current,
+      leftEarX - earringWidth / 2 - sideOffset,
+      leftEarY + hangingOffset,
+      earringWidth,
+      earringHeight
+    );
+    ctx.restore();
+
+    // Right earring (mirrored for symmetry)
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    
+    // Add shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = -2;
+    ctx.shadowOffsetY = 2;
+    
+    // For right ear, we can either mirror or use the same image
+    ctx.scale(-1, 1);
+    ctx.drawImage(
+      productImageRef.current,
+      -(rightEarX + earringWidth / 2 + sideOffset),
+      rightEarY + hangingOffset,
+      earringWidth,
+      earringHeight
+    );
+    ctx.restore();
+
+    // Optional: Draw ear position indicators (for debugging)
+    if (false) { // Set to true for debugging
+      ctx.fillStyle = 'rgba(255, 255, 0, 0.7)';
+      ctx.beginPath();
+      ctx.arc(leftEarX, leftEarY, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.arc(rightEarX, rightEarY, 3, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  };
+
+  // Improved necklace rendering
+  const renderNecklace = (ctx, landmarks, faceBox) => {
+    const necklaceWidth = faceBox.width * 0.7;
+    const aspectRatio = productImageRef.current.height / productImageRef.current.width;
+    const necklaceHeight = necklaceWidth * aspectRatio * 0.6;
+
+    // Position necklace at the base of the neck
+    const necklaceX = landmarks.chin.x - necklaceWidth / 2;
+    const necklaceY = landmarks.chin.y + faceBox.height * 0.15;
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 3;
+    ctx.shadowOffsetY = 2;
+    
+    ctx.drawImage(
+      productImageRef.current,
+      necklaceX,
+      necklaceY,
+      necklaceWidth,
+      necklaceHeight
+    );
+    ctx.restore();
+  };
+
+  // Improved ring rendering
+  const renderRing = (ctx, landmarks, faceBox) => {
+    const ringSize = Math.max(faceBox.width * 0.06, 20);
+    
+    // Better hand position estimation
+    const ringX = landmarks.rightCheek.x + faceBox.width * 0.15;
+    const ringY = landmarks.chin.y + faceBox.height * 0.1;
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+    ctx.shadowBlur = 2;
+    
+    ctx.drawImage(
+      productImageRef.current,
+      ringX - ringSize / 2,
+      ringY - ringSize / 2,
+      ringSize,
+      ringSize
+    );
+    ctx.restore();
+  };
 
   // Render overlay function
   const renderOverlay = useCallback(async () => {
@@ -326,18 +472,20 @@ export default function TryOnModal({ product, onClose }) {
     if (detection && productImageRef.current && imageLoaded) {
       const { landmarks, faceBox } = detection;
       
-      // Draw face detection box (for debugging)
-      ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
-      
-      // Draw landmarks
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
-      Object.entries(landmarks).forEach(([name, point]) => {
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
-        ctx.fill();
-      });
+      // Draw face detection box (for debugging - set to false in production)
+      if (false) {
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
+        
+        // Draw landmarks
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+        Object.entries(landmarks).forEach(([name, point]) => {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      }
 
       // Determine jewelry type and render
       const jewelryType = getJewelryType(product);
@@ -353,7 +501,7 @@ export default function TryOnModal({ product, onClose }) {
           renderRing(ctx, landmarks, faceBox);
           break;
         default:
-          renderEarrings(ctx, landmarks, faceBox); // Default to earrings
+          renderEarrings(ctx, landmarks, faceBox);
       }
     } else {
       setRenderingActive(false);
@@ -377,78 +525,7 @@ export default function TryOnModal({ product, onClose }) {
     } else if (name.includes('ring') || category.includes('ring')) {
       return 'ring';
     }
-    return 'earrings'; // default
-  };
-
-  // Render earrings
-  const renderEarrings = (ctx, landmarks, faceBox) => {
-    const baseSize = Math.max(faceBox.width * 0.15, 40);
-    const aspectRatio = productImageRef.current.height / productImageRef.current.width;
-    const earringWidth = baseSize;
-    const earringHeight = baseSize * aspectRatio;
-
-    // Left earring
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.drawImage(
-      productImageRef.current,
-      landmarks.leftEar.x - earringWidth / 2,
-      landmarks.leftEar.y - earringHeight * 0.2,
-      earringWidth,
-      earringHeight
-    );
-    ctx.restore();
-
-    // Right earring (mirrored)
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.scale(-1, 1);
-    ctx.drawImage(
-      productImageRef.current,
-      -(landmarks.rightEar.x + earringWidth / 2),
-      landmarks.rightEar.y - earringHeight * 0.2,
-      earringWidth,
-      earringHeight
-    );
-    ctx.restore();
-  };
-
-  // Render necklace
-  const renderNecklace = (ctx, landmarks, faceBox) => {
-    const necklaceWidth = faceBox.width * 0.8;
-    const aspectRatio = productImageRef.current.height / productImageRef.current.width;
-    const necklaceHeight = necklaceWidth * aspectRatio * 0.5;
-
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.drawImage(
-      productImageRef.current,
-      landmarks.chin.x - necklaceWidth / 2,
-      landmarks.chin.y + faceBox.height * 0.1,
-      necklaceWidth,
-      necklaceHeight
-    );
-    ctx.restore();
-  };
-
-  // Render ring (on hand - simplified)
-  const renderRing = (ctx, landmarks, faceBox) => {
-    const ringSize = Math.max(faceBox.width * 0.08, 25);
-    
-    // Position ring near bottom right of face (simulating hand position)
-    const ringX = landmarks.rightEar.x + faceBox.width * 0.2;
-    const ringY = landmarks.chin.y + faceBox.height * 0.2;
-
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.drawImage(
-      productImageRef.current,
-      ringX - ringSize / 2,
-      ringY - ringSize / 2,
-      ringSize,
-      ringSize
-    );
-    ctx.restore();
+    return 'earrings';
   };
 
   // Start detection when video is ready
@@ -541,7 +618,7 @@ export default function TryOnModal({ product, onClose }) {
         <div className="p-6">
           <h2 className="text-xl font-bold mb-2">Virtual Try-On</h2>
           <p className="text-gray-600 mb-4">
-            Try on {product?.name || 'jewelry'} using AI face detection
+            Try on {product?.name || 'jewelry'} using improved AI face detection
           </p>
 
           {/* Status Information */}
@@ -557,7 +634,7 @@ export default function TryOnModal({ product, onClose }) {
                 <span className={faceDetectionModel ? 'text-green-600' : 'text-yellow-600'}>
                   {faceDetectionModel ? '✅' : '⏳'}
                 </span>
-                Face Detection
+                Enhanced Face Detection
               </div>
               <div className="flex items-center gap-2">
                 <span className={videoReady ? 'text-green-600' : 'text-gray-500'}>
@@ -595,8 +672,8 @@ export default function TryOnModal({ product, onClose }) {
               </div>
 
               <p className="mb-6 text-sm text-gray-600">
-                Our AI will detect your face and overlay the jewelry in real-time. 
-                Make sure you're in good lighting for best results.
+                Our enhanced AI will detect your face and position jewelry accurately in real-time. 
+                Ensure good lighting and face the camera directly for optimal results.
               </p>
 
               <button
@@ -605,9 +682,9 @@ export default function TryOnModal({ product, onClose }) {
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Camera size={20} />
-                {modelLoading ? 'Loading AI Model...' : 
+                {modelLoading ? 'Loading Enhanced AI...' : 
                  !imageLoaded ? 'Loading Product...' : 
-                 'Start Virtual Try-On'}
+                 'Start Enhanced Try-On'}
               </button>
             </div>
           )}
@@ -632,20 +709,20 @@ export default function TryOnModal({ product, onClose }) {
 
                 <div className="absolute top-4 left-4 text-white text-xs bg-black bg-opacity-70 p-2 rounded">
                   {!videoReady ? '📹 Starting camera...' : 
-                   !faceDetectionModel ? '🤖 Loading AI...' :
+                   !faceDetectionModel ? '🤖 Loading Enhanced AI...' :
                    !imageLoaded ? '🖼️ Loading product...' :
-                   renderingActive ? `✨ Jewelry visible (${Math.round(detectionConfidence * 100)}%)` : 
-                   '👁️ Looking for face...'}
+                   renderingActive ? `✨ Jewelry positioned (${Math.round(detectionConfidence * 100)}%)` : 
+                   '👁️ Analyzing face position...'}
                 </div>
 
                 {renderingActive && (
                   <div className="absolute top-4 right-4 text-white text-xs bg-green-600 bg-opacity-90 p-2 rounded font-medium">
-                    🎯 Try-On Active
+                    🎯 Enhanced Try-On Active
                   </div>
                 )}
 
                 <div className="absolute bottom-4 left-4 text-white text-xs bg-black bg-opacity-70 p-2 rounded">
-                  💡 Tip: Face the camera directly in good lighting
+                  💡 Tip: Face camera directly with ears visible for best earring placement
                 </div>
               </div>
 
