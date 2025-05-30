@@ -72,93 +72,213 @@ export default function TryOnModal({ product, onClose }) {
   }, []);
 
   // Simple face detection algorithm using image processing
-  const detectFacesInImageData = (imageData, width, height) => {
-    const data = imageData.data;
-    
-    // Simple skin tone detection and face region estimation
-    let skinPixels = 0;
-    let totalPixels = 0;
-    let minX = width, maxX = 0, minY = height, maxY = 0;
-    let centerX = 0, centerY = 0;
-    let skinRegions = [];
-    
-    // Scan image for skin-like colors
-    for (let y = 0; y < height; y += 4) {
-      for (let x = 0; x < width; x += 4) {
-        const i = (y * width + x) * 4;
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
+  // Improved face detection algorithm with better landmark positioning
+const detectFacesInImageData = (imageData, width, height) => {
+  const data = imageData.data;
+  
+  // Simple skin tone detection and face region estimation
+  let skinPixels = 0;
+  let totalPixels = 0;
+  let minX = width, maxX = 0, minY = height, maxY = 0;
+  let centerX = 0, centerY = 0;
+  let skinRegions = [];
+  
+  // Scan image for skin-like colors
+  for (let y = 0; y < height; y += 4) {
+    for (let x = 0; x < width; x += 4) {
+      const i = (y * width + x) * 4;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Simple skin tone detection
+      if (isSkinTone(r, g, b)) {
+        skinPixels++;
+        skinRegions.push({ x, y });
         
-        // Simple skin tone detection
-        if (isSkinTone(r, g, b)) {
-          skinPixels++;
-          skinRegions.push({ x, y });
-          
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-          
-          centerX += x;
-          centerY += y;
-        }
-        totalPixels++;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        
+        centerX += x;
+        centerY += y;
       }
+      totalPixels++;
     }
+  }
+  
+  if (skinPixels < 50) {
+    return []; // Not enough skin pixels detected
+  }
+  
+  centerX /= skinPixels;
+  centerY /= skinPixels;
+  
+  // Calculate face dimensions with better proportions
+  const detectedWidth = maxX - minX;
+  const detectedHeight = maxY - minY;
+  
+  // Use more realistic face proportions
+  // Average human face is about 1.3:1 height to width ratio
+  const faceWidth = Math.max(detectedWidth * 1.1, 80); // Add some padding
+  const faceHeight = Math.max(detectedHeight * 1.2, faceWidth * 1.3); // Maintain proper ratio
+  
+  // Adjust face center - faces are typically wider in the middle
+  const faceCenterX = centerX;
+  const faceCenterY = minY + (faceHeight * 0.45); // Face center is about 45% from top
+  
+  // Calculate confidence based on skin detection quality
+  const confidence = Math.min(skinPixels / (totalPixels * 0.08), 1);
+  
+  if (confidence > 0.25) {
+    // Calculate anatomically accurate landmark positions
+    const landmarks = calculateAnatomicalLandmarks(faceCenterX, faceCenterY, faceWidth, faceHeight);
     
-    if (skinPixels < 50) {
-      return []; // Not enough skin pixels detected
+    return [{
+      faceBox: {
+        x: faceCenterX - faceWidth / 2,
+        y: faceCenterY - faceHeight / 2,
+        width: faceWidth,
+        height: faceHeight
+      },
+      landmarks: landmarks,
+      confidence: confidence
+    }];
+  }
+  
+  return [];
+};
+
+// Calculate anatomically accurate facial landmarks
+const calculateAnatomicalLandmarks = (centerX, centerY, faceWidth, faceHeight) => {
+  // Standard facial proportions based on anthropometric data
+  // These ratios are based on average human face measurements
+  
+  return {
+    // Ears are positioned at about 40-45% from center, at eye level
+    leftEar: { 
+      x: centerX - (faceWidth * 0.42), 
+      y: centerY - (faceHeight * 0.12) // Slightly above center (eye level)
+    },
+    rightEar: { 
+      x: centerX + (faceWidth * 0.42), 
+      y: centerY - (faceHeight * 0.12)
+    },
+    
+    // Nose is at face center
+    nose: { 
+      x: centerX, 
+      y: centerY 
+    },
+    
+    // Chin is at bottom 35% of face
+    chin: { 
+      x: centerX, 
+      y: centerY + (faceHeight * 0.35) 
+    },
+    
+    // Forehead is at top 30% of face
+    forehead: {
+      x: centerX,
+      y: centerY - (faceHeight * 0.3)
+    },
+    
+    // Additional landmarks for better jewelry positioning
+    leftTemple: {
+      x: centerX - (faceWidth * 0.35),
+      y: centerY - (faceHeight * 0.25)
+    },
+    rightTemple: {
+      x: centerX + (faceWidth * 0.35),
+      y: centerY - (faceHeight * 0.25)
+    },
+    
+    // Eye positions for reference
+    leftEye: {
+      x: centerX - (faceWidth * 0.18),
+      y: centerY - (faceHeight * 0.12)
+    },
+    rightEye: {
+      x: centerX + (faceWidth * 0.18),
+      y: centerY - (faceHeight * 0.12)
+    },
+    
+    // Cheekbone positions
+    leftCheek: {
+      x: centerX - (faceWidth * 0.25),
+      y: centerY + (faceHeight * 0.05)
+    },
+    rightCheek: {
+      x: centerX + (faceWidth * 0.25),
+      y: centerY + (faceHeight * 0.05)
     }
-    
-    centerX /= skinPixels;
-    centerY /= skinPixels;
-    
-    // Estimate face dimensions
-    const faceWidth = (maxX - minX) * 1.2;
-    const faceHeight = faceWidth * 1.3;
-    
-    // Adjust center point to be more face-like (slightly higher)
-    const faceCenterY = centerY - faceHeight * 0.1;
-    
-    const confidence = Math.min(skinPixels / (totalPixels * 0.1), 1);
-    
-    if (confidence > 0.3) {
-      return [{
-        faceBox: {
-          x: centerX - faceWidth / 2,
-          y: faceCenterY - faceHeight / 2,
-          width: faceWidth,
-          height: faceHeight
-        },
-        landmarks: {
-          leftEar: { 
-            x: centerX - faceWidth * 0.35, 
-            y: faceCenterY - faceHeight * 0.05 
-          },
-          rightEar: { 
-            x: centerX + faceWidth * 0.35, 
-            y: faceCenterY - faceHeight * 0.05 
-          },
-          nose: { 
-            x: centerX, 
-            y: faceCenterY 
-          },
-          chin: { 
-            x: centerX, 
-            y: faceCenterY + faceHeight * 0.35 
-          },
-          forehead: {
-            x: centerX,
-            y: faceCenterY - faceHeight * 0.3
-          }
-        },
-        confidence: confidence
-      }];
-    }
-    
-    return [];
   };
+};
+
+// Enhanced skin tone detection with better color ranges
+const isSkinTone = (r, g, b) => {
+  // Expanded skin tone detection for better inclusivity
+  
+  // Rule 1: Basic skin tone detection
+  const basicSkin = r > 95 && g > 40 && b > 20 && 
+                   Math.max(r, g, b) - Math.min(r, g, b) > 15 && 
+                   Math.abs(r - g) > 15 && r > g && r > b;
+  
+  // Rule 2: Medium skin tones
+  const mediumSkin = r > 85 && g > 50 && b > 35 && 
+                     r >= g && g >= b && (r - b) > 15;
+  
+  // Rule 3: Darker skin tones
+  const darkSkin = r > 50 && g > 30 && b > 20 && 
+                   r > b && g > b && (r - b) > 8;
+                   
+  // Rule 4: Very light skin tones
+  const lightSkin = r > 120 && g > 80 && b > 60 && 
+                    r > g && r > b && (r - g) < 50;
+                    
+  // Rule 5: Asian skin tones
+  const asianSkin = r > 80 && g > 60 && b > 40 && 
+                    Math.abs(r - g) < 30 && r > b && g > b;
+  
+  return basicSkin || mediumSkin || darkSkin || lightSkin || asianSkin;
+};
+
+// Debug function to visualize all landmarks (use in development)
+const drawAllLandmarks = (ctx, landmarks, faceBox) => {
+  // Draw face box
+  ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
+  
+  // Draw landmarks with different colors
+  const landmarkColors = {
+    leftEar: 'red',
+    rightEar: 'red',
+    nose: 'blue',
+    chin: 'green',
+    forehead: 'purple',
+    leftEye: 'orange',
+    rightEye: 'orange',
+    leftCheek: 'pink',
+    rightCheek: 'pink'
+  };
+  
+  Object.entries(landmarks).forEach(([name, point]) => {
+    ctx.fillStyle = landmarkColors[name] || 'yellow';
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    // Add label
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1;
+    ctx.font = '10px Arial';
+    ctx.strokeText(name, point.x + 6, point.y - 6);
+    ctx.fillText(name, point.x + 6, point.y - 6);
+  });
+};
 
   // Helper function to detect skin tones
   const isSkinTone = (r, g, b) => {
@@ -283,88 +403,91 @@ export default function TryOnModal({ product, onClose }) {
   }, [faceDetectionModel]);
 
   // Render overlay function
-  const renderOverlay = useCallback(async () => {
-    if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
-      if (step === 'camera') {
-        animationFrameRef.current = requestAnimationFrame(renderOverlay);
-      }
-      return;
-    }
-
-    const video = videoRef.current;
-    const canvas = overlayCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    // Set canvas size to match video
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-    }
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Detect face
-    let detection = null;
-    if (faceDetectionModel) {
-      detection = await detectFace(video);
-      if (detection) {
-        setLastDetection(detection);
-        setRenderingActive(true);
-      } else {
-        setRenderingActive(false);
-      }
-    }
-
-    // Use last detection if current detection failed
-    if (!detection && lastDetection) {
-      detection = lastDetection;
-      setRenderingActive(true);
-    }
-
-    // Render jewelry if we have detection and product image
-    if (detection && productImageRef.current && imageLoaded) {
-      const { landmarks, faceBox } = detection;
-      
-      // Draw face detection box (for debugging)
-      ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(faceBox.x, faceBox.y, faceBox.width, faceBox.height);
-      
-      // Draw landmarks
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
-      Object.entries(landmarks).forEach(([name, point]) => {
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-
-      // Determine jewelry type and render
-      const jewelryType = getJewelryType(product);
-      
-      switch (jewelryType) {
-        case 'earrings':
-          renderEarrings(ctx, landmarks, faceBox);
-          break;
-        case 'necklace':
-          renderNecklace(ctx, landmarks, faceBox);
-          break;
-        case 'ring':
-          renderRing(ctx, landmarks, faceBox);
-          break;
-        default:
-          renderEarrings(ctx, landmarks, faceBox); // Default to earrings
-      }
-    } else {
-      setRenderingActive(false);
-    }
-
-    // Continue animation loop
+  // Updated render overlay function with debug options
+const renderOverlay = useCallback(async () => {
+  if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
     if (step === 'camera') {
       animationFrameRef.current = requestAnimationFrame(renderOverlay);
     }
-  }, [videoReady, step, faceDetectionModel, detectFace, lastDetection, product, imageLoaded]);
+    return;
+  }
 
+  const video = videoRef.current;
+  const canvas = overlayCanvasRef.current;
+  const ctx = canvas.getContext('2d');
+
+  // Set canvas size to match video
+  if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+  }
+
+  // Clear canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Detect face
+  let detection = null;
+  if (faceDetectionModel) {
+    detection = await detectFace(video);
+    if (detection) {
+      setLastDetection(detection);
+      setRenderingActive(true);
+    } else {
+      setRenderingActive(false);
+    }
+  }
+
+  // Use last detection if current detection failed
+  if (!detection && lastDetection) {
+    detection = lastDetection;
+    setRenderingActive(true);
+  }
+
+  // Render jewelry if we have detection and product image
+  if (detection && productImageRef.current && imageLoaded) {
+    const { landmarks, faceBox } = detection;
+    
+    // Debug mode - show all landmarks (enable for debugging)
+    const debugMode = process.env.NODE_ENV === 'development'; // Change to true to see all landmarks
+    
+    if (debugMode) {
+      drawAllLandmarks(ctx, landmarks, faceBox);
+    } else {
+      // Production mode - only show ear landmarks
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+      ctx.beginPath();
+      ctx.arc(landmarks.leftEar.x, landmarks.leftEar.y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(landmarks.rightEar.x, landmarks.rightEar.y, 3, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Determine jewelry type and render
+    const jewelryType = getJewelryType(product);
+    
+    switch (jewelryType) {
+      case 'earrings':
+        renderEarrings(ctx, landmarks, faceBox);
+        break;
+      case 'necklace':
+        renderNecklace(ctx, landmarks, faceBox);
+        break;
+      case 'ring':
+        renderRing(ctx, landmarks, faceBox);
+        break;
+      default:
+        renderEarrings(ctx, landmarks, faceBox); // Default to earrings
+    }
+  } else {
+    setRenderingActive(false);
+  }
+
+  // Continue animation loop
+  if (step === 'camera') {
+    animationFrameRef.current = requestAnimationFrame(renderOverlay);
+  }
+}, [videoReady, step, faceDetectionModel, detectFace, lastDetection, product, imageLoaded]);
   // Get jewelry type from product
   const getJewelryType = (product) => {
     const name = product?.name?.toLowerCase() || '';
