@@ -382,36 +382,83 @@ export default function TryOnModal({ product, onClose }) {
 
   // Render earrings
   const renderEarrings = (ctx, landmarks, faceBox) => {
-    const baseSize = Math.max(faceBox.width * 0.15, 40);
-    const aspectRatio = productImageRef.current.height / productImageRef.current.width;
-    const earringWidth = baseSize;
-    const earringHeight = baseSize * aspectRatio;
+  // Get actual image dimensions
+  const imageWidth = productImageRef.current.naturalWidth || productImageRef.current.width;
+  const imageHeight = productImageRef.current.naturalHeight || productImageRef.current.height;
+  const imageAspectRatio = imageHeight / imageWidth;
+  
+  // Calculate earring size based on face proportions
+  // Earrings typically should be 8-12% of face width
+  const faceWidth = faceBox.width;
+  const earringWidthPercent = 0.10; // 10% of face width
+  const earringWidth = Math.max(faceWidth * earringWidthPercent, 25); // Min 25px
+  const earringHeight = earringWidth * imageAspectRatio;
+  
+  // Calculate ear positions more accurately
+  // Ears are typically positioned at about 15% from the sides and 25% from top of face
+  const earOffsetX = faceWidth * 0.42; // Distance from face center to ear
+  const earOffsetY = faceBox.height * 0.15; // Height from top of face to ear level
+  
+  const leftEarX = landmarks.nose.x - earOffsetX;
+  const rightEarX = landmarks.nose.x + earOffsetX;
+  const earY = faceBox.y + earOffsetY;
+  
+  // Earring hanging position adjustments
+  // Earrings typically hang slightly below and outward from the ear
+  const hangingOffsetY = earringHeight * 0.1; // Slight downward offset
+  const outwardOffsetX = earringWidth * 0.1; // Slight outward offset
+  
+  // Left earring
+  ctx.save();
+  ctx.globalAlpha = 0.85; // Slightly more transparent for realism
+  
+  // Add subtle shadow for depth
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+  
+  ctx.drawImage(
+    productImageRef.current,
+    leftEarX - (earringWidth / 2) - outwardOffsetX,
+    earY + hangingOffsetY,
+    earringWidth,
+    earringHeight
+  );
+  ctx.restore();
 
-    // Left earring
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.drawImage(
-      productImageRef.current,
-      landmarks.leftEar.x - earringWidth / 2,
-      landmarks.leftEar.y - earringHeight * 0.2,
-      earringWidth,
-      earringHeight
-    );
-    ctx.restore();
+  // Right earring
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  
+  // Add shadow
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetX = -2; // Shadow on opposite side for right earring
+  ctx.shadowOffsetY = 2;
 
-    // Right earring (mirrored)
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.scale(-1, 1);
-    ctx.drawImage(
-      productImageRef.current,
-      -(landmarks.rightEar.x + earringWidth / 2),
-      landmarks.rightEar.y - earringHeight * 0.2,
-      earringWidth,
-      earringHeight
-    );
-    ctx.restore();
-  };
+  // For symmetrical earrings, just flip horizontally
+  ctx.scale(-1, 1);
+  ctx.drawImage(
+    productImageRef.current,
+    -(rightEarX + (earringWidth / 2) + outwardOffsetX),
+    earY + hangingOffsetY,
+    earringWidth,
+    earringHeight
+  );
+  ctx.restore();
+  
+  // Optional: Draw debug points to visualize ear positions (remove in production)
+  if (process.env.NODE_ENV === 'development') {
+    ctx.fillStyle = 'rgba(255, 255, 0, 0.7)';
+    ctx.beginPath();
+    ctx.arc(leftEarX, earY, 3, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(rightEarX, earY, 3, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+};
 
   // Render necklace
   const renderNecklace = (ctx, landmarks, faceBox) => {
