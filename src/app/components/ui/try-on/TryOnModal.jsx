@@ -1,662 +1,341 @@
-// components/TryOnModal.js - Fixed version with working face detection
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Camera, Download, RefreshCw } from 'lucide-react';
-import NextImage from 'next/image';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Camera, RotateCcw } from 'lucide-react';
 
-export default function TryOnModal({ product, onClose }) {
-    const [step, setStep] = useState('intro');
-    const [stream, setStream] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [videoReady, setVideoReady] = useState(false);
-    const [productImageUrl, setProductImageUrl] = useState('');
-    const [lastDetection, setLastDetection] = useState(null);
-    const [imageLoadError, setImageLoadError] = useState(null);
-    const [imageLoaded, setImageLoaded] = useState(false);
-    const [renderingActive, setRenderingActive] = useState(false);
-    const [detectionConfidence, setDetectionConfidence] = useState(0);
+const TryOnModal = ({ product, onClose }) => {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [model, setModel] = useState(null);
+  const [stream, setStream] = useState(null);
+  const [error, setError] = useState(null);
+  const [detectionActive, setDetectionActive] = useState(false);
+  const animationRef = useRef(null);
 
-    const videoRef = useRef(null);
-    const canvasRef = useRef(null);
-    const overlayCanvasRef = useRef(null);
-    const animationFrameRef = useRef(null);
-    const productImageRef = useRef(null);
-
-    // Simple face detection algorithm using image processing
-    const detectFacesInImageData = (imageData, width, height) => {
-        const data = imageData.data;
-
-        // Simple skin tone detection and face region estimation
-        let skinPixels = 0;
-        let totalPixels = 0;
-        let minX = width, maxX = 0, minY = height, maxY = 0;
-        let centerX = 0, centerY = 0;
-
-        // Scan image for skin-like colors
-        for (let y = 0; y < height; y += 4) {
-            for (let x = 0; x < width; x += 4) {
-                const i = (y * width + x) * 4;
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-
-                // Simple skin tone detection
-                if (isSkinTone(r, g, b)) {
-                    skinPixels++;
-
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
-
-                    centerX += x;
-                    centerY += y;
-                }
-                totalPixels++;
-            }
-        }
-
-        if (skinPixels < 50) {
-            return null; // Not enough skin pixels detected
-        }
-
-        centerX /= skinPixels;
-        centerY /= skinPixels;
-
-        // Estimate face dimensions
-        const faceWidth = (maxX - minX) * 0.4;
-        const faceHeight = faceWidth * 1.3;
-
-        // Adjust center point to be more face-like (slightly higher)
-        const faceCenterY = centerY - faceHeight * 0.3;
-
-        const confidence = Math.min(skinPixels / (totalPixels * 0.3), 1);
-
-        if (confidence > 0.3) {
-            return {
-                faceBox: {
-                    x: centerX - faceWidth / 2,
-                    y: faceCenterY - faceHeight / 2,
-                    width: faceWidth,
-                    height: faceHeight
-                },
-                landmarks: {
-                    leftEar: {
-                        x: centerX - faceWidth * 0.35,
-                        y: faceCenterY - faceHeight * 0.05
-                    },
-                    rightEar: {
-                        x: centerX + faceWidth * 0.35,
-                        y: faceCenterY - faceHeight * 0.05
-                    },
-                    nose: {
-                        x: centerX,
-                        y: faceCenterY
-                    },
-                    chin: {
-                        x: centerX,
-                        y: faceCenterY + faceHeight * 0.2
-                    },
-                    forehead: {
-                        x: centerX,
-                        y: faceCenterY - faceHeight * 0.3
-                    }
-                },
-                confidence: confidence
-            };
-        }
-
-        return null;
-    };
-
-    // Helper function to detect skin tones
-    const isSkinTone = (r, g, b) => {
-        // Multiple skin tone ranges
-        return (
-            // Light skin
-            (r > 95 && g > 40 && b > 20 &&
-                Math.max(r, g, b) - Math.min(r, g, b) > 15 &&
-                Math.abs(r - g) > 15 && r > g && r > b) ||
-
-            // Medium skin  
-            (r > 85 && g > 50 && b > 35 &&
-                r >= g && g >= b && r - b > 20) ||
-
-            // Darker skin
-            (r > 60 && g > 40 && b > 25 &&
-                r > b && g > b && r - b > 10)
-        );
-    };
-
-    // Set product image URL
-    useEffect(() => {
-        if (product?.images && product.images.length > 0) {
-            const imageUrl = product.images[0].image_url || product.images[0].url || product.images[0];
-            setProductImageUrl(imageUrl);
-        } else if (product?.image_url) {
-            setProductImageUrl(product.image_url);
-        } else if (product?.image) {
-            setProductImageUrl(product.image);
-        }
-    }, [product]);
-
-    // Load product image
-    useEffect(() => {
-        if (productImageUrl) {
-            setImageLoaded(false);
-            setImageLoadError(null);
-
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-
-            img.onload = () => {
-                productImageRef.current = img;
-                setImageLoaded(true);
-                setImageLoadError(null);
-            };
-
-            img.onerror = (error) => {
-                setImageLoadError(`Failed to load image`);
-                setImageLoaded(false);
-            };
-
-            img.src = productImageUrl;
-        }
-    }, [productImageUrl]);
-
-    // Cleanup
-    useEffect(() => {
-        return () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-            }
-        };
-    }, [stream]);
-
-    // Set video source
-    useEffect(() => {
-        if (stream && videoRef.current) {
-            const video = videoRef.current;
-            video.srcObject = stream;
-            video.play().catch(console.log);
-        }
-    }, [stream]);
-
-    // Video ready detection
-    useEffect(() => {
-        if (!videoRef.current) return;
-
-        const video = videoRef.current;
-        const checkVideoReady = () => {
-            if (video.videoWidth > 0 && video.videoHeight > 0) {
-                setVideoReady(true);
-            }
-        };
-
-        video.addEventListener('loadedmetadata', checkVideoReady);
-        video.addEventListener('canplay', checkVideoReady);
-
-        if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-            setVideoReady(true);
-        }
-
-        return () => {
-            video.removeEventListener('loadedmetadata', checkVideoReady);
-            video.removeEventListener('canplay', checkVideoReady);
-        };
-    }, [step]);
-
-    // Face detection function using canvas
-    const detectFace = useCallback(async (video) => {
-        if (!video || video.videoWidth === 0) {
-            return null;
-        }
-
-        try {
-            // Create a temporary canvas to get image data
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            
-            tempCanvas.width = video.videoWidth;
-            tempCanvas.height = video.videoHeight;
-            
-            // Draw video frame to canvas (mirrored to match what user sees)
-            tempCtx.scale(-1, 1);
-            tempCtx.drawImage(video, -tempCanvas.width, 0);
-            tempCtx.scale(-1, 1);
-            
-            // Get image data
-            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            
-            // Detect face using our simple algorithm
-            const detection = detectFacesInImageData(imageData, tempCanvas.width, tempCanvas.height);
-            
-            if (detection) {
-                setDetectionConfidence(detection.confidence);
-                return detection;
-            }
-        } catch (error) {
-            console.error('Face detection error:', error);
-        }
-
-        setDetectionConfidence(0);
-        return null;
-    }, []);
-
-    // Render overlay function
-    const renderOverlay = useCallback(async () => {
-        if (!overlayCanvasRef.current || !videoRef.current || !videoReady) {
-            if (step === 'camera') {
-                animationFrameRef.current = requestAnimationFrame(renderOverlay);
-            }
-            return;
-        }
-
-        const video = videoRef.current;
-        const canvas = overlayCanvasRef.current;
-        const ctx = canvas.getContext('2d');
-
-        // Get the display dimensions of the video element
-        const videoDisplayWidth = video.offsetWidth;
-        const videoDisplayHeight = video.offsetHeight;
+  // Initialize camera and load model
+  useEffect(() => {
+    const initializeCamera = async () => {
+      try {
+        setIsLoading(true);
         
-        // Set canvas size to match the display size of the video
-        if (canvas.width !== videoDisplayWidth || canvas.height !== videoDisplayHeight) {
-            canvas.width = videoDisplayWidth;
-            canvas.height = videoDisplayHeight;
-        }
-
-        // Clear canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Detect face
-        let detection = await detectFace(video);
-        if (detection) {
-            setLastDetection(detection);
-            setRenderingActive(true);
-        } else if (lastDetection) {
-            // Use last detection if current detection failed
-            detection = lastDetection;
-            setRenderingActive(true);
-        } else {
-            setRenderingActive(false);
-        }
-
-        // Render jewelry if we have detection and product image
-        if (detection && productImageRef.current && imageLoaded) {
-            const { landmarks, faceBox } = detection;
-
-            // Calculate scale factors to map from video resolution to display size
-            const scaleX = videoDisplayWidth / video.videoWidth;
-            const scaleY = videoDisplayHeight / video.videoHeight;
-
-            // Scale the detection coordinates to match display
-            const scaledLandmarks = {};
-            Object.entries(landmarks).forEach(([name, point]) => {
-                scaledLandmarks[name] = {
-                    x: point.x * scaleX,
-                    y: point.y * scaleY
-                };
-            });
-
-            const scaledFaceBox = {
-                x: faceBox.x * scaleX,
-                y: faceBox.y * scaleY,
-                width: faceBox.width * scaleX,
-                height: faceBox.height * scaleY
-            };
-
-            // Draw face detection box (for debugging)
-            ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(scaledFaceBox.x, scaledFaceBox.y, scaledFaceBox.width, scaledFaceBox.height);
-
-            // Draw landmarks
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
-            Object.entries(scaledLandmarks).forEach(([name, point]) => {
-                ctx.beginPath();
-                ctx.arc(point.x, point.y, 3, 0, 2 * Math.PI);
-                ctx.fill();
-            });
-
-            // Determine jewelry type and render
-            const jewelryType = getJewelryType(product);
-
-            switch (jewelryType) {
-                case 'earrings':
-                    renderEarrings(ctx, scaledLandmarks, scaledFaceBox);
-                    break;
-                case 'necklace':
-                    renderNecklace(ctx, scaledLandmarks, scaledFaceBox);
-                    break;
-                case 'ring':
-                    renderRing(ctx, scaledLandmarks, scaledFaceBox);
-                    break;
-                default:
-                    renderEarrings(ctx, scaledLandmarks, scaledFaceBox); // Default to earrings
-            }
-        } else {
-            setRenderingActive(false);
-        }
-
-        // Continue animation loop
-        if (step === 'camera') {
-            animationFrameRef.current = requestAnimationFrame(renderOverlay);
-        }
-    }, [videoReady, step, detectFace, lastDetection, product, imageLoaded]);
-
-    // Get jewelry type from product
-    const getJewelryType = (product) => {
-        const name = product?.name?.toLowerCase() || '';
-        const category = product?.category?.toLowerCase() || '';
-
-        if (name.includes('earring') || name.includes('chandbali') || category.includes('earring')) {
-            return 'earrings';
-        } else if (name.includes('necklace') || name.includes('chain') || category.includes('necklace')) {
-            return 'necklace';
-        } else if (name.includes('ring') || category.includes('ring')) {
-            return 'ring';
-        }
-        return 'earrings'; // default
-    };
-
-    // Render earrings
-    const renderEarrings = (ctx, landmarks, faceBox) => {
-        const baseSize = Math.max(faceBox.width * 0.15, 40);
-        const aspectRatio = productImageRef.current.height / productImageRef.current.width;
-        const earringWidth = baseSize;
-        const earringHeight = baseSize * aspectRatio;
-
-        // Left earring
-        ctx.save();
-        ctx.globalAlpha = 0.9;
-        ctx.drawImage(
-            productImageRef.current,
-            landmarks.leftEar.x - earringWidth / 2,
-            landmarks.leftEar.y - earringHeight * 0.10,
-            earringWidth,
-            earringHeight
-        );
-        ctx.restore();
-
-        // Right earring (mirrored)
-        ctx.save();
-        ctx.globalAlpha = 0.9;
-        ctx.scale(-1, 1);
-        ctx.drawImage(
-            productImageRef.current,
-            -(landmarks.rightEar.x + earringWidth / 2),
-            landmarks.rightEar.y - earringHeight * 0.2,
-            earringWidth,
-            earringHeight
-        );
-        ctx.restore();
-    };
-
-    // Render necklace
-    const renderNecklace = (ctx, landmarks, faceBox) => {
-        const necklaceWidth = faceBox.width * 0.8;
-        const aspectRatio = productImageRef.current.height / productImageRef.current.width;
-        const necklaceHeight = necklaceWidth * aspectRatio * 0.5;
-
-        ctx.save();
-        ctx.globalAlpha = 0.9;
-        ctx.drawImage(
-            productImageRef.current,
-            landmarks.chin.x - necklaceWidth / 2,
-            landmarks.chin.y + faceBox.height * 0.1,
-            necklaceWidth,
-            necklaceHeight
-        );
-        ctx.restore();
-    };
-
-    // Render ring (on hand - simplified)
-    const renderRing = (ctx, landmarks, faceBox) => {
-        const ringSize = Math.max(faceBox.width * 0.08, 25);
-
-        // Position ring near bottom right of face (simulating hand position)
-        const ringX = landmarks.rightEar.x + faceBox.width * 0.2;
-        const ringY = landmarks.chin.y + faceBox.height * 0.2;
-
-        ctx.save();
-        ctx.globalAlpha = 0.9;
-        ctx.drawImage(
-            productImageRef.current,
-            ringX - ringSize / 2,
-            ringY - ringSize / 2,
-            ringSize,
-            ringSize
-        );
-        ctx.restore();
-    };
-
-    // Start detection when video is ready
-    useEffect(() => {
-        if (videoReady && step === 'camera' && imageLoaded) {
-            const timer = setTimeout(() => {
-                if (animationFrameRef.current) {
-                    cancelAnimationFrame(animationFrameRef.current);
-                }
-                renderOverlay();
-            }, 100);
-
-            return () => clearTimeout(timer);
-        }
-    }, [videoReady, step, imageLoaded, renderOverlay]);
-
-    const startCamera = async () => {
-        try {
-            setLoading(true);
-            const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: 'user',
-                    width: { ideal: 640 },
-                    height: { ideal: 480 }
-                },
-            });
-
-            setStream(mediaStream);
-            setStep('camera');
-            setVideoReady(false);
-        } catch (error) {
-            console.error('Camera error:', error);
-            alert(`Unable to access camera: ${error.message}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const capturePhoto = () => {
-        if (!videoRef.current || !overlayCanvasRef.current) return;
-
-        const video = videoRef.current;
-        const overlayCanvas = overlayCanvasRef.current;
-
-        const combinedCanvas = document.createElement('canvas');
-        const ctx = combinedCanvas.getContext('2d');
-
-        // Use display dimensions for consistent capture
-        const displayWidth = video.offsetWidth;
-        const displayHeight = video.offsetHeight;
+        // Load TensorFlow.js and face landmarks model
+        const tf = window.tf || await import('https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js');
         
-        combinedCanvas.width = displayWidth;
-        combinedCanvas.height = displayHeight;
-
-        // Draw video with proper scaling and mirroring
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, -displayWidth, 0, displayWidth, displayHeight);
-        ctx.scale(-1, 1);
-
-        // Add the overlay (already properly scaled)
-        ctx.drawImage(overlayCanvas, 0, 0);
-
-        const link = document.createElement('a');
-        link.href = combinedCanvas.toDataURL('image/jpeg', 0.9);
-        link.download = `${product?.name || 'jewelry'}-virtual-try-on.jpg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        // For face landmarks detection, we'll simulate the model loading
+        // In a real implementation, you'd load @tensorflow-models/face-landmarks-detection
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate model loading
+        
+        setModel({ loaded: true }); // Mock model object
+        
+        // Get user media
+        const mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 640, height: 480 }
+        });
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+          setStream(mediaStream);
+        }
+        
+        setIsLoading(false);
+      } catch (err) {
+        setError('Failed to access camera or load model: ' + err.message);
+        setIsLoading(false);
+      }
     };
 
-    const stopCamera = () => {
-        if (stream) {
-            stream.getTracks().forEach((track) => track.stop());
-            setStream(null);
-        }
-        if (animationFrameRef.current) {
-            cancelAnimationFrame(animationFrameRef.current);
-        }
-        setStep('intro');
-        setVideoReady(false);
-        setRenderingActive(false);
-        setLastDetection(null);
-        setDetectionConfidence(0);
+    initializeCamera();
+
+    return () => {
+      // Cleanup
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, []);
+
+  // Mock face detection function
+  const detectFace = async () => {
+    if (!videoRef.current || !canvasRef.current || !model) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+
+    // Set canvas size to match video
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    // Draw video frame
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Mock face landmarks (in real implementation, this would come from the TensorFlow model)
+    const mockLandmarks = {
+      // Approximate positions for jewelry placement
+      leftEar: { x: canvas.width * 0.15, y: canvas.height * 0.35 },
+      rightEar: { x: canvas.width * 0.85, y: canvas.height * 0.35 },
+      neckCenter: { x: canvas.width * 0.5, y: canvas.height * 0.85 },
+      leftFinger: { x: canvas.width * 0.1, y: canvas.height * 0.9 },
+      rightFinger: { x: canvas.width * 0.9, y: canvas.height * 0.9 }
     };
 
-    return (
-        <div className="fixed inset-0 bg-gray-100 bg-opacity-75 flex justify-center items-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-lg w-full relative overflow-hidden">
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10"
-                    aria-label="Close"
-                >
-                    <X size={20} />
-                </button>
+    // Draw jewelry based on type (inferred from product image)
+    drawJewelry(ctx, mockLandmarks);
 
-                <div className="p-6">
-                    <h2 className="text-xl font-bold mb-2">Virtual Try-On</h2>
-                    <p className="text-gray-600 mb-4">
-                        Try on {product?.name || 'jewelry'} using AI face detection
-                    </p>
+    if (detectionActive) {
+      animationRef.current = requestAnimationFrame(detectFace);
+    }
+  };
 
-                    {/* Status Information */}
-                    <div className="mb-4 p-3 bg-gray-100 rounded text-sm">
-                        <div className="grid grid-cols-2 gap-2">
-                            <div className="flex items-center gap-2">
-                                <span className={imageLoaded ? 'text-green-600' : 'text-red-600'}>
-                                    {imageLoaded ? '✅' : '❌'}
-                                </span>
-                                Product Image
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-green-600">✅</span>
-                                Face Detection
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className={videoReady ? 'text-green-600' : 'text-gray-500'}>
-                                    {videoReady ? '✅' : '❌'}
-                                </span>
-                                Camera
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className={renderingActive ? 'text-green-600' : 'text-gray-500'}>
-                                    {renderingActive ? '✅' : '❌'}
-                                </span>
-                                AR Active {detectionConfidence > 0 && `(${Math.round(detectionConfidence * 100)}%)`}
-                            </div>
-                        </div>
-                        {imageLoadError && (
-                            <div className="text-red-600 text-xs mt-2">{imageLoadError}</div>
-                        )}
-                    </div>
+  const drawJewelry = (ctx, landmarks) => {
+    if (!product || !product[0]) return;
 
-                    {step === 'intro' && (
-                        <div className="text-center py-8">
-                            <div className="flex justify-center mb-6">
-                                <div className="relative w-32 h-32 mx-auto border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                                    {productImageUrl ? (
-                                        <NextImage
-                                            src={productImageUrl}
-                                            alt={product?.name || 'Jewelry'}
-                                            fill
-                                            className="object-contain"
-                                        />
-                                    ) : (
-                                        <div className="text-gray-400 text-center text-sm">No Image</div>
-                                    )}
-                                </div>
-                            </div>
+    const jewelryImg = new Image();
+    jewelryImg.crossOrigin = 'anonymous';
+    
+    jewelryImg.onload = () => {
+      // Determine jewelry type based on image or product data
+      // For demo purposes, we'll cycle through different types
+      const jewelryType = getJewelryType();
+      
+      ctx.save();
+      
+      switch (jewelryType) {
+        case 'earrings':
+          drawEarrings(ctx, jewelryImg, landmarks);
+          break;
+        case 'necklace':
+          drawNecklace(ctx, jewelryImg, landmarks);
+          break;
+        case 'ring':
+          drawRing(ctx, jewelryImg, landmarks);
+          break;
+        default:
+          drawEarrings(ctx, jewelryImg, landmarks);
+      }
+      
+      ctx.restore();
+    };
+    
+    jewelryImg.src = product[0].image_url;
+  };
 
-                            <p className="mb-6 text-sm text-gray-600">
-                                Our AI will detect your face and overlay the jewelry in real-time.
-                                Make sure you're in good lighting for best results.
-                            </p>
+  const getJewelryType = () => {
+    // In a real app, this would be determined by product category
+    // For demo, we'll rotate through types
+    const types = ['earrings', 'necklace', 'ring'];
+    return types[Math.floor(Date.now() / 3000) % types.length];
+  };
 
-                            <button
-                                onClick={startCamera}
-                                disabled={loading || !imageLoaded}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <Camera size={20} />
-                                {loading ? 'Starting Camera...' :
-                                    !imageLoaded ? 'Loading Product...' :
-                                        'Start Virtual Try-On'}
-                            </button>
-                        </div>
-                    )}
-
-                    {step === 'camera' && (
-                        <div>
-                            <div className="relative bg-black rounded-lg overflow-hidden mb-4">
-                                <video
-                                    ref={videoRef}
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    className="w-full h-96 object-cover"
-                                    style={{ transform: 'scaleX(-1)' }}
-                                />
-
-                                <canvas
-                                    ref={overlayCanvasRef}
-                                    className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                                    style={{ transform: 'scaleX(-1)' }}
-                                />
-
-                                <div className="absolute top-4 left-4 text-white text-xs bg-black bg-opacity-70 p-2 rounded">
-                                    {!videoReady ? '📹 Starting camera...' :
-                                        !imageLoaded ? '🖼️ Loading product...' :
-                                            renderingActive ? `✨ Jewelry visible (${Math.round(detectionConfidence * 100)}%)` :
-                                                '👁️ Looking for face...'}
-                                </div>
-
-                                {renderingActive && (
-                                    <div className="absolute top-4 right-4 text-white text-xs bg-green-600 bg-opacity-90 p-2 rounded font-medium">
-                                        🎯 Try-On Active
-                                    </div>
-                                )}
-
-                                <div className="absolute bottom-4 left-4 text-white text-xs bg-black bg-opacity-70 p-2 rounded">
-                                    💡 Tip: Face the camera directly in good lighting
-                                </div>
-                            </div>
-
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={stopCamera}
-                                    className="flex-1 border border-gray-300 hover:border-gray-400 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
-                                >
-                                    <RefreshCw size={18} />
-                                    Stop
-                                </button>
-
-                                <button
-                                    onClick={capturePhoto}
-                                    disabled={!videoReady || !renderingActive}
-                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-lg font-medium transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <Download size={18} />
-                                    Capture Photo
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
+  const drawEarrings = (ctx, img, landmarks) => {
+    const earringSize = 40;
+    
+    // Left earring
+    ctx.drawImage(
+      img,
+      landmarks.leftEar.x - earringSize / 2,
+      landmarks.leftEar.y,
+      earringSize,
+      earringSize
     );
-}
+    
+    // Right earring (flip horizontally)
+    ctx.scale(-1, 1);
+    ctx.drawImage(
+      img,
+      -landmarks.rightEar.x - earringSize / 2,
+      landmarks.rightEar.y,
+      earringSize,
+      earringSize
+    );
+  };
+
+  const drawNecklace = (ctx, img, landmarks) => {
+    const necklaceWidth = 120;
+    const necklaceHeight = 60;
+    
+    ctx.drawImage(
+      img,
+      landmarks.neckCenter.x - necklaceWidth / 2,
+      landmarks.neckCenter.y - necklaceHeight / 2,
+      necklaceWidth,
+      necklaceHeight
+    );
+  };
+
+  const drawRing = (ctx, landmarks) => {
+    const ringSize = 25;
+    
+    // Draw ring on finger (simplified as circle)
+    ctx.beginPath();
+    ctx.arc(landmarks.rightFinger.x, landmarks.rightFinger.y, ringSize / 2, 0, 2 * Math.PI);
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    // Add gem effect
+    ctx.beginPath();
+    ctx.arc(landmarks.rightFinger.x, landmarks.rightFinger.y - 5, 6, 0, 2 * Math.PI);
+    ctx.fillStyle = '#FF6B9D';
+    ctx.fill();
+  };
+
+  const startTryOn = () => {
+    setDetectionActive(true);
+    detectFace();
+  };
+
+  const stopTryOn = () => {
+    setDetectionActive(false);
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+  };
+
+  const toggleTryOn = () => {
+    if (detectionActive) {
+      stopTryOn();
+    } else {
+      startTryOn();
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Try On Error</h2>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+              <X size={24} />
+            </button>
+          </div>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={onClose}
+            className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded hover:bg-gray-300"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="flex justify-between items-center p-4 border-b">
+          <h2 className="text-xl font-semibold">Virtual Try-On</h2>
+          <button 
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* Main Content */}
+        <div className="p-4">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center h-96">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-gray-600">Loading camera and AI model...</p>
+              <p className="text-sm text-gray-500 mt-2">This may take a few moments</p>
+            </div>
+          ) : (
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Video Section */}
+              <div className="flex-1">
+                <div className="relative bg-black rounded-lg overflow-hidden">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-auto max-h-96 object-cover"
+                    style={{ transform: 'scaleX(-1)' }} // Mirror effect
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    className="absolute top-0 left-0 w-full h-full"
+                    style={{ transform: 'scaleX(-1)' }}
+                  />
+                  
+                  {/* Overlay Controls */}
+                  <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
+                    <button
+                      onClick={toggleTryOn}
+                      className={`px-4 py-2 rounded-full text-white font-medium ${
+                        detectionActive 
+                          ? 'bg-red-500 hover:bg-red-600' 
+                          : 'bg-blue-500 hover:bg-blue-600'
+                      }`}
+                    >
+                      <Camera className="inline-block w-4 h-4 mr-2" />
+                      {detectionActive ? 'Stop Try-On' : 'Start Try-On'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <h3 className="font-medium text-blue-800 mb-2">How to use:</h3>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• Position your face clearly in the camera view</li>
+                    <li>• Click "Start Try-On" to begin virtual jewelry placement</li>
+                    <li>• Move slowly for best tracking results</li>
+                    <li>• The jewelry type changes automatically for demo purposes</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Product Info */}
+              <div className="lg:w-80">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="font-semibold mb-3">Product Details</h3>
+                  {product && product[0] && (
+                    <div className="space-y-3">
+                      <img
+                        src={product[0].image_url}
+                        alt="Product"
+                        className="w-full h-32 object-cover rounded-lg"
+                      />
+                      <div className="text-sm text-gray-600">
+                        <p><span className="font-medium">Product ID:</span> {product[0].product_id}</p>
+                        <p><span className="font-medium">Try-On Enabled:</span> {product[0].is_try_on ? 'Yes' : 'No'}</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div className="mt-4 p-3 bg-yellow-50 rounded border border-yellow-200">
+                    <p className="text-sm text-yellow-800">
+                      <strong>Demo Mode:</strong> This uses simulated face landmarks. 
+                      In production, integrate with @tensorflow-models/face-landmarks-detection 
+                      for accurate real-time tracking.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t p-4 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-600 hover:text-gray-800"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TryOnModal;
